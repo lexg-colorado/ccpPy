@@ -31,8 +31,11 @@ python scripts/01_parse_htop.py
 # Output: Creates data/asts/*.json files and data/asts/parse_summary.json
 # Features: Parallel processing, caching, progress bars, statistics
 
-# Phase 2: Build dependency graph (NOT YET IMPLEMENTED)
+# Phase 2: Build dependency graph ✅ WORKING
 python scripts/02_build_graph.py
+# Output: Creates data/graphs/function_graph.gpickle, file_graph.gpickle,
+#         translation_order.json, graph_analysis.json
+# Features: Call graph, file dependencies, topological sort, cycle detection
 
 # Phase 3: Create semantic index for code search (NOT YET IMPLEMENTED)
 python scripts/03_index_code.py
@@ -148,12 +151,23 @@ Access config values using `Config().get('section.key', default_value)` with dot
     - Progress tracking with tqdm
     - Error handling and reporting
     - JSON export of parsed ASTs
-- [ ] Phase 2: Dependency graph builder (`scripts/02_build_graph.py`)
+- [x] **Phase 2 Complete: Dependency Graph Builder** (`scripts/02_build_graph.py`)
+  - `DependencyGraphBuilder` class: Analyzes code dependencies using NetworkX
+  - Function call graph (directed graph of function calls)
+  - File dependency graph (include relationships between files)
+  - Completed features:
+    - Topological sort for optimal translation ordering
+    - Leaf node identification (functions with no dependencies)
+    - Strongly connected components detection (cycle detection)
+    - Graph complexity analysis (density, connectivity metrics)
+    - Most called/calling function identification
+    - Export graphs as pickle (for processing) and JSON (for inspection)
+    - Translation order generation for Phase 4
 - [ ] Phase 3: Semantic indexing (`scripts/03_index_code.py`)
 - [ ] Phase 4: Translation engine (`scripts/04_translate.py`)
 - [ ] Validation suite
 
-Phases 2-4 modules currently contain stubs with `NotImplementedError`. Check GAMEPLAN.md for detailed implementation roadmap.
+Phases 3-4 modules currently contain stubs with `NotImplementedError`. Check GAMEPLAN.md for detailed implementation roadmap.
 
 ## Important Constraints
 

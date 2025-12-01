@@ -242,16 +242,26 @@ pip install ollama-python  # or use requests directly
   - Smart caching mechanism
   - Comprehensive statistics generation
 - [x] Test on htop codebase
-- [ ] Build basic dependency graph (moved to Phase 2)
 
-### Phase 2: Translation (Week 2)
+### Phase 2: Dependency Analysis ✅ **COMPLETE**
+- [x] Build dependency graph system
+  - Function call graph (directed graph)
+  - File dependency graph (include relationships)
+- [x] Implement topological sort for translation ordering
+- [x] Identify leaf nodes (functions with no dependencies)
+- [x] Detect cycles using strongly connected components
+- [x] Graph complexity analysis and metrics
+- [x] Export graphs for visualization and processing
+
+### Phase 3: Semantic Indexing & Translation Setup
+- [ ] Implement semantic indexing with embeddings
 - [ ] Implement context retrieval
 - [ ] Set up Ollama integration with qwen
 - [ ] Build translation orchestrator
 - [ ] Translate first module (e.g., Process.c)
 - [ ] Validate output
 
-### Phase 3: Scale & Refine (Week 3+)
+### Phase 4: Scale & Refine
 - [ ] Translate multiple modules
 - [ ] Identify common failure patterns
 - [ ] Refine prompts and context retrieval
@@ -416,6 +426,47 @@ self.parser.language = tree_sitter_c.language()
 **Performance**: Successfully parses entire htop codebase (~37k lines) with caching and parallel processing.
 
 **Next**: Phase 2 - Build dependency graph using networkx to enable topological translation ordering.
+
+### 2025-12-01: Phase 2 Complete - Dependency Graph Builder
+**Completed Components**:
+
+**DependencyGraphBuilder** (`scripts/02_build_graph.py`):
+- Loads parsed AST data from Phase 1 cache
+- Builds two complementary graphs using NetworkX:
+  1. **Function Call Graph**: Directed graph showing which functions call which
+  2. **File Dependency Graph**: Directed graph of include relationships
+
+**Key Features Implemented**:
+1. **Graph Construction**:
+   - Function nodes with metadata (file, line, return type)
+   - File nodes with statistics (function count, struct count)
+   - Smart include path resolution (relative and htop root)
+
+2. **Dependency Analysis**:
+   - Topological sort for optimal translation order
+   - Leaf node identification (functions with no dependencies)
+   - Strongly connected components detection (recursive cycles)
+   - Approximate ordering fallback for cyclic graphs
+
+3. **Graph Analytics**:
+   - Graph density calculations
+   - DAG verification (is graph acyclic?)
+   - Most called/calling function identification
+   - Complexity metrics and statistics
+
+4. **Output Formats**:
+   - Pickle format (`.gpickle`) for programmatic use
+   - JSON format for human inspection
+   - Translation order file for Phase 4
+   - Comprehensive analysis report
+
+**Key Insights**:
+- Successfully handles both acyclic and cyclic dependency graphs
+- Provides translation ordering that minimizes context requirements
+- Identifies mutual recursion for special handling
+- Exports both machine-readable and human-readable formats
+
+**Next**: Phase 3 - Semantic indexing with embeddings for context-aware code retrieval.
 
 ---
 

@@ -82,7 +82,12 @@ This was a compatibility issue with modern tree-sitter Python bindings. The fix 
   - BatchParser handles parallel file processing with caching
   - `01_parse_htop.py` script fully functional
   - Generates comprehensive statistics and summaries
-- [ ] Phase 2: Dependency graph builder
+- [x] **Phase 2 Complete: Dependency Graph Builder**
+  - Function call graph (who calls whom)
+  - File dependency graph (include relationships)
+  - Topological sort for optimal translation order
+  - Cycle detection and strongly connected components
+  - `02_build_graph.py` script fully functional
 - [ ] Phase 3: Semantic indexing
 - [ ] Phase 4: Translation engine
 - [ ] Validation suite
