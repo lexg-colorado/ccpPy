@@ -253,15 +253,29 @@ pip install ollama-python  # or use requests directly
 - [x] Graph complexity analysis and metrics
 - [x] Export graphs for visualization and processing
 
-### Phase 3: Semantic Indexing & Translation Setup
-- [ ] Implement semantic indexing with embeddings
-- [ ] Implement context retrieval
+### Phase 3: Semantic Indexing ✅ **COMPLETE**
+- [x] Implement semantic indexing with embeddings
+  - EmbeddingGenerator using sentence-transformers
+  - Rich text representation of functions
+  - Batch processing for efficiency
+- [x] Build FAISS vector store
+  - Cosine similarity search
+  - Function-to-function similarity
+  - Context retrieval for RAG
+- [x] Create indexing orchestration script
+  - Load parsed data from Phase 1
+  - Generate and save embeddings
+  - Build and validate index
+  - Export statistics and metadata
+
+### Phase 4: Translation Setup
 - [ ] Set up Ollama integration with qwen
-- [ ] Build translation orchestrator
+- [ ] Build translation orchestrator using RAG
+- [ ] Implement context builder (uses Phase 3 embeddings)
 - [ ] Translate first module (e.g., Process.c)
 - [ ] Validate output
 
-### Phase 4: Scale & Refine
+### Phase 5: Scale & Refine
 - [ ] Translate multiple modules
 - [ ] Identify common failure patterns
 - [ ] Refine prompts and context retrieval
@@ -467,6 +481,69 @@ self.parser.language = tree_sitter_c.language()
 - Exports both machine-readable and human-readable formats
 
 **Next**: Phase 3 - Semantic indexing with embeddings for context-aware code retrieval.
+
+### 2025-12-01: Phase 3 Complete - Semantic Indexing System
+**Completed Components**:
+
+**1. EmbeddingGenerator** (`src/indexing/embedder.py`):
+- Uses sentence-transformers (all-MiniLM-L6-v2 model)
+- Converts C functions to rich semantic text representations:
+  * Function signature (name, return type, parameters)
+  * Called functions (dependencies)
+  * Function body (actual code, truncated to 500 chars)
+- Batch processing for efficiency
+- Error handling with fallback to minimal representations
+- Supports both batch and single-function embedding
+- Query embedding for custom searches
+
+**2. VectorStore** (`src/indexing/vector_store.py`):
+- FAISS-based similarity search system
+- Supports multiple metrics:
+  * Cosine similarity (default, using normalized inner product)
+  * Euclidean distance
+- Multiple index types:
+  * Flat index (exact search, good for <1M vectors)
+  * IVF index (approximate search for larger datasets)
+- Core functionality:
+  * Add embeddings with metadata
+  * Similarity search with top-k results
+  * Function-to-function similarity lookup
+  * **RAG-ready**: `get_context_for_translation()` method
+  * Save/load functionality for persistence
+  * Statistics tracking
+
+**3. SemanticIndexer** (`scripts/03_index_code.py`):
+- Orchestrates the complete indexing pipeline
+- Loads parsed function data from Phase 1
+- Generates embeddings for all functions
+- Builds FAISS vector index
+- Validates index with sample similarity queries
+- Exports multiple artifacts:
+  * `function_index.faiss` - FAISS index file
+  * `function_embeddings.npy` - Raw embeddings array
+  * `function_metadata.json` - Function metadata and mappings
+  * `index_stats.json` - Statistics and configuration
+
+**Key Design Decisions**:
+1. **Rich Text Representation**: Combines signature, dependencies, and code for semantic understanding
+2. **Batch Processing**: Processes embeddings in configurable batches (default: 32)
+3. **Cosine Similarity**: Better for semantic similarity than Euclidean distance
+4. **Metadata Truncation**: Limits body to 500 chars, calls to 20 items for efficiency
+5. **Function Name Indexing**: Fast lookup by function name for RAG context retrieval
+
+**Performance Characteristics**:
+- Embedding dimension: 384 (all-MiniLM-L6-v2)
+- Average search time: Sub-millisecond for exact search
+- Scalable to hundreds of thousands of functions
+- Index can be memory-mapped for large datasets
+
+**Integration with Phase 4**:
+The `get_context_for_translation()` method provides exactly what the RAG translator needs:
+- Target function metadata
+- Similar function examples with similarity scores
+- Ready to inject into LLM context window
+
+**Next**: Phase 4 - RAG-based translation engine using Ollama and context from Phase 3.
 
 ---
 
