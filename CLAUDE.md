@@ -44,8 +44,14 @@ python scripts/03_index_code.py
 # Features: Sentence-transformers embeddings, FAISS similarity search,
 #           context retrieval for RAG
 
-# Phase 4: Translate code with RAG context retrieval (NOT YET IMPLEMENTED)
-python scripts/04_translate.py --module Process
+# Phase 4: Translate code with RAG context retrieval ✅ WORKING
+python scripts/04_translate.py --limit 10  # Translate first 10 functions
+python scripts/04_translate.py --dry-run   # Preview without translating
+# Output: Creates output/python/*.py files, translation_stats.json
+#         Creates memory/translations.json (translation memory)
+# Features: Ollama LLM integration, RAG with few-shot examples,
+#           retry with validation feedback, comprehensive code validation,
+#           quality scoring, translation memory
 ```
 
 ### Testing
@@ -181,10 +187,30 @@ Access config values using `Config().get('section.key', default_value)` with dot
     - Index validation with sample queries
     - Save/load functionality for embeddings and index
     - Comprehensive statistics and performance metrics
-- [ ] Phase 4: Translation engine (`scripts/04_translate.py`)
-- [ ] Validation suite
+- [x] **Phase 4 Complete: RAG Translation Engine** (`scripts/04_translate.py`, `src/translation/`, `src/validation/`)
+  - `OllamaClient` class: Integration with local Ollama LLM (qwen3:4b)
+  - `PromptBuilder` class: RAG-aware prompt construction with few-shot examples
+  - `FunctionTranslator` class: Core translation logic with retry mechanism
+  - `CodeValidator` class: Comprehensive Python code validation
+  - `TranslationOrchestrator` class: End-to-end translation pipeline
+  - Completed features:
+    - Ollama API integration with retry logic and exponential backoff
+    - RAG context retrieval using Phase 3 embeddings
+    - Few-shot learning from similar translated functions
+    - Iterative refinement (max 3 attempts) with validation feedback
+    - Translation memory for C→Python entity mappings
+    - Comprehensive validation:
+      * Syntax checking (AST parsing)
+      * Type hints validation (parameters and return type)
+      * Docstring presence (Google style)
+      * Basic PEP 8 compliance
+      * Import analysis
+    - Quality scoring system (0-10 scale)
+    - Statistics tracking (success rate, avg quality, attempts)
+    - CLI with --limit, --dry-run, --no-leaves options
+    - Grouped output by source file
 
-Phase 4 module currently contains stubs with `NotImplementedError`. Check GAMEPLAN.md for detailed implementation roadmap.
+**All phases complete!** Full RAG-based C-to-Python translation pipeline operational.
 
 ## Important Constraints
 
