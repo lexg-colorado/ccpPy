@@ -1,0 +1,33 @@
+# Core parsing and analysis
+tree-sitter==0.21.3
+tree-sitter-c==0.21.4
+
+# Graph analysis and visualization
+networkx==3.2.1
+matplotlib==3.8.2
+
+# Semantic indexing and embeddings
+sentence-transformers==2.3.1
+faiss-cpu>=1.8.0
+numpy==1.26.3
+
+# LLM interaction
+requests==2.31.0
+
+# Configuration and utilities
+pyyaml==6.0.1
+tqdm==4.66.1
+
+# Code validation
+pylint==3.0.3
+mypy==1.8.0
+
+# Development and testing
+pytest==7.4.3
+pytest-cov==4.1.0
+black==23.12.1
+isort==5.13.2
+
+# Optional: Jupyter for exploration
+jupyter==1.0.0
+ipykernel==6.29.0

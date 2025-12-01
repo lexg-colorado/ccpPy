@@ -1,0 +1,118 @@
+# htop-translator configuration
+
+# Source code paths
+source:
+  htop_path: "/home/lex/Python/htop"
+  # Specific subdirectories to focus on (empty = all)
+  include_dirs: []
+  # File patterns to exclude
+  exclude_patterns:
+    - "*.o"
+    - "*.a"
+    - "build/*"
+    - "*.autom4te.cache"
+
+# Output paths (relative to project root)
+output:
+  data_dir: "data"
+  ast_cache: "data/ast_cache"
+  graphs: "data/graphs"
+  embeddings: "data/embeddings"
+  translation_memory: "data/translation_memory"
+  python_output: "output/htop_py"
+
+# Parsing configuration
+parsing:
+  # File extensions to parse
+  extensions:
+    - ".c"
+    - ".h"
+  # Maximum file size to parse (in MB)
+  max_file_size_mb: 10
+
+# Dependency graph settings
+dependency_graph:
+  # Include system headers in graph?
+  include_system_headers: false
+  # Maximum depth for dependency traversal
+  max_depth: 10
+
+# Embedding configuration
+embeddings:
+  # Model for generating embeddings
+  # Options: "sentence-transformers", "tfidf"
+  model_type: "sentence-transformers"
+  model_name: "all-MiniLM-L6-v2"
+  # Chunk size for code units
+  chunk_size: 512
+  # Batch size for embedding generation
+  batch_size: 32
+
+# Vector store settings
+vector_store:
+  # Type: "faiss", "simple"
+  type: "faiss"
+  # Similarity metric: "cosine", "euclidean"
+  similarity_metric: "cosine"
+  # Number of results to retrieve
+  top_k: 5
+
+# LLM configuration (Ollama)
+llm:
+  # Ollama endpoint
+  base_url: "http://localhost:11434"
+  # Model to use for translation
+  model: "qwen3:4b"
+  # Generation parameters
+  temperature: 0.2
+  top_p: 0.9
+  max_tokens: 4096
+  # Context window management
+  max_context_tokens: 8192
+
+# Translation settings
+translation:
+  # Start with leaf nodes (no dependencies)
+  start_with_leaves: true
+  # Maximum number of iterations for a single translation
+  max_iterations: 3
+  # Include similar code examples in context
+  include_examples: true
+  # Number of similar examples to include
+  num_examples: 3
+
+# Validation settings
+validation:
+  # Run syntax validation
+  check_syntax: true
+  # Run type checking (mypy)
+  check_types: true
+  # Run linting (pylint)
+  run_linting: false
+  # Minimum code quality score (0-10)
+  min_quality_score: 6.0
+
+# Logging configuration
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  file: "logs/translator.log"
+  # Log to console as well
+  console: true
+
+# Performance settings
+performance:
+  # Use multiprocessing for parsing
+  parallel_parsing: true
+  # Number of worker processes (null = CPU count)
+  num_workers: null
+  # Cache parsed ASTs
+  cache_asts: true
+
+# Experimental features
+experimental:
+  # Use few-shot learning with examples
+  few_shot_translation: true
+  # Attempt to preserve code comments
+  preserve_comments: true
+  # Generate type hints in Python output
+  generate_type_hints: true
