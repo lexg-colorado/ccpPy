@@ -32,7 +32,7 @@ from utils.logger import setup_logger
 
 
 class TranslationOrchestrator:
-    """Orchestrate the translation of htop C codebase to Python."""
+    """Orchestrate the translation of C codebase to Python."""
     
     def __init__(self, config: Config, logger, debug_mode: bool = False):
         """Initialize translation orchestrator with configuration."""
@@ -332,7 +332,7 @@ class TranslationOrchestrator:
 
 def main():
     """Main entry point for translation."""
-    parser = argparse.ArgumentParser(description="Translate htop C code to Python")
+    parser = argparse.ArgumentParser(description="Translate C code to Python")
     parser.add_argument('--limit', type=int, help='Limit number of functions to translate')
     parser.add_argument('--no-leaves', action='store_true', help='Don\'t prioritize leaf nodes')
     parser.add_argument('--dry-run', action='store_true', help='Show what would be translated')

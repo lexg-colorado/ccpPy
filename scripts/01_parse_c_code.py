@@ -1,9 +1,9 @@
 #! /usr/bin/env python3
 """
-Phase 1: Parse htop C codebase into AST representation.
+Phase 1: Parse C codebase into AST representation.
 
 This script:
-1. Finds all C files in the htop source directory
+1. Finds all C files in the C source directory
 2. Parses each file using tree-sitter
 3. Caches parsed AST data as JSON
 4. Generates summary statistics
@@ -35,7 +35,7 @@ class BatchParser:
         self.logger = logger
         
         # Get paths from config
-        self.htop_path = Path(config.get('source.htop_path'))
+        self.source_path = Path(config.get('source.source_path'))
         self.cache_dir = Path(config.get('output.ast_cache'))
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         
@@ -48,12 +48,12 @@ class BatchParser:
     
     def find_c_files(self) -> List[Path]:
         """
-        Find all C source files in the htop directory.
+        Find all C source files in the source directory.
         
         Returns:
             List of Path objects for C files
         """
-        self.logger.info(f"Searching for C files in {self.htop_path}")
+        self.logger.info(f"Searching for C files in {self.source_path}")
         
         c_files = []
         
@@ -63,10 +63,10 @@ class BatchParser:
         
         if include_dirs:
             # Only search specified directories
-            search_paths = [self.htop_path / d for d in include_dirs]
+            search_paths = [self.source_path / d for d in include_dirs]
         else:
-            # Search entire htop directory
-            search_paths = [self.htop_path]
+            # Search entire source directory
+            search_paths = [self.source_path]
         
         for search_path in search_paths:
             if not search_path.exists():
@@ -100,8 +100,8 @@ class BatchParser:
         Returns:
             Path to cached JSON file
         """
-        # Create relative path from htop root
-        rel_path = source_file.relative_to(self.htop_path)
+        # Create relative path from source root
+        rel_path = source_file.relative_to(self.source_path)
         # Replace extension with .json
         cache_file = self.cache_dir / rel_path.with_suffix('.json')
         return cache_file
@@ -317,7 +317,7 @@ class BatchParser:
     def print_statistics(self, stats: Dict[str, Any]) -> None:
         """Print statistics in a readable format."""
         print("\n" + "="*60)
-        print("HTOP PARSING SUMMARY")
+        print("C CODE PARSING SUMMARY")
         print("="*60)
         print(f"\nFiles:")
         print(f"  Total files:    {stats['total_files']}")
@@ -350,7 +350,7 @@ def main():
     logger = setup_logger("batch_parser", level=log_level, log_file=log_file)
     
     logger.info("="*60)
-    logger.info("Starting htop batch parsing")
+    logger.info("Starting C code batch parsing")
     logger.info("="*60)
     
     # Create batch parser

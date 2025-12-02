@@ -1,11 +1,11 @@
-# htop C-to-Python Translation Project
+# C-to-Python Translation Project
 ## RAG-Based Code Migration Proof of Concept
 
-**Project Goal**: Build a proof-of-concept system that uses RAG (Retrieval-Augmented Generation) with dependency graph analysis to automatically translate the htop C codebase to Python.
+**Project Goal**: Build a proof-of-concept system that uses RAG (Retrieval-Augmented Generation) with dependency graph analysis to automatically translate C codebases to Python.
 
-**Target Codebase**: htop (~37k total lines, ~29k C code)
+**Original Test Case**: htop (~37k total lines, ~29k C code)
 - Repository: https://github.com/htop-dev/htop
-- Local path: `~/Python/htop`
+- Can be configured to translate any C codebase via `config.yaml` → `source.source_path`
 
 ---
 
@@ -241,7 +241,7 @@ pip install ollama-python  # or use requests directly
   - Parallel processing with ProcessPoolExecutor
   - Smart caching mechanism
   - Comprehensive statistics generation
-- [x] Test on htop codebase
+- [x] Test on C codebase
 
 ### Phase 2: Dependency Analysis ✅ **COMPLETE**
 - [x] Build dependency graph system
@@ -340,7 +340,7 @@ pip install ollama-python  # or use requests directly
 - Basic functionality works (e.g., can read /proc)
 
 **Full Success**:
-- Translate 80%+ of htop functionality
+- Translate 80%+ of target C codebase functionality
 - Python version produces same output as C version
 - Code is maintainable (not just machine-generated spaghetti)
 - Document learnings for other translation projects
@@ -397,7 +397,7 @@ matplotlib (for visualization)
 ## Next Steps
 
 1. **Immediate**: Set up project structure and install dependencies
-2. **First Task**: Build the AST parser to extract functions from htop
+2. **First Task**: Build the AST parser to extract functions from C codebase
 3. **Quick Win**: Translate a single, simple C file to validate the approach
 
 ---
@@ -447,8 +447,8 @@ self.parser.language = tree_sitter_c.language()
    - Extracts include statements (system vs local)
    - Handles function call graph extraction
 
-2. **BatchParser** (`scripts/01_parse_htop.py`):
-   - Discovers all C files in htop source directory
+2. **BatchParser** (`scripts/01_parse_c_code.py`):
+   - Discovers all C files in configured source directory
    - Parallel processing using ProcessPoolExecutor
    - Smart caching system (checks file modification times)
    - Generates comprehensive statistics:
@@ -460,7 +460,7 @@ self.parser.language = tree_sitter_c.language()
    - Error handling and reporting
    - JSON export of all parsed data
 
-**Performance**: Successfully parses entire htop codebase (~37k lines) with caching and parallel processing.
+**Performance**: Successfully parses entire C codebases (tested on htop ~37k lines) with caching and parallel processing.
 
 **Next**: Phase 2 - Build dependency graph using networkx to enable topological translation ordering.
 
@@ -477,7 +477,7 @@ self.parser.language = tree_sitter_c.language()
 1. **Graph Construction**:
    - Function nodes with metadata (file, line, return type)
    - File nodes with statistics (function count, struct count)
-   - Smart include path resolution (relative and htop root)
+   - Smart include path resolution (relative and source root)
 
 2. **Dependency Analysis**:
    - Topological sort for optimal translation order
@@ -692,7 +692,7 @@ The complete pipeline now works end-to-end:
 3. Generate embeddings → Vector search (Phase 3)
 4. Translate with RAG → Validated Python (Phase 4)
 
-**Next**: Production use - translate actual htop modules and refine based on results.
+**Next**: Production use - translate actual C projects and refine based on results.
 
 ### 2025-12-01: Translation Quality Improvements
 **Problem**: Initial translations had lower success rates due to:

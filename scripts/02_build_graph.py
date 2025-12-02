@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Phase 2: Build dependency graph from parsed htop codebase.
+Phase 2: Build dependency graph from parsed C codebase.
 
 This script:
 1. Loads parsed AST data from cache

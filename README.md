@@ -1,6 +1,6 @@
-# htop C-to-Python Translator
+# C-to-Python Translator
 
-A proof-of-concept RAG-based code translation system that automatically converts the htop C codebase to Python using dependency-aware context retrieval and local LLMs.
+A proof-of-concept RAG-based code translation system that automatically converts C codebases to Python using dependency-aware context retrieval and local LLMs.
 
 ## Overview
 
@@ -37,17 +37,17 @@ ollama serve
 
 ### 2. Configure Paths
 
-Edit `config.yaml` to point to your htop source directory:
+Edit `config.yaml` to point to your C source directory:
 ```yaml
 source:
-  htop_path: "/home/lex/Python/htop"
+  source_path: "/path/to/your/c/project"
 ```
 
 ### 3. Run the Pipeline
 
 ```bash
-# Phase 1: Parse htop C code
-python scripts/01_parse_htop.py
+# Phase 1: Parse C code
+python scripts/01_parse_c_code.py
 
 # Phase 2: Build dependency graph
 python scripts/02_build_graph.py
@@ -80,7 +80,7 @@ This was a compatibility issue with modern tree-sitter Python bindings. The fix 
 - [x] **Phase 1 Complete: AST Parser Implementation**
   - CParser class extracts functions, structs, includes, and call relationships
   - BatchParser handles parallel file processing with caching
-  - `01_parse_htop.py` script fully functional
+  - `01_parse_c_code.py` script fully functional
   - Generates comprehensive statistics and summaries
 - [x] **Phase 2 Complete: Dependency Graph Builder**
   - Function call graph (who calls whom)
@@ -109,10 +109,10 @@ This was a compatibility issue with modern tree-sitter Python bindings. The fix 
 
 ## Goals
 
-**MVP**: Successfully translate 3-5 core htop modules with syntactically valid, functional Python code.
+**MVP**: Successfully translate core C modules with syntactically valid, functional Python code.
 
-**Full Success**: Translate 80%+ of htop functionality while maintaining semantic correctness and code quality.
+**Full Success**: Translate 80%+ of C codebase functionality while maintaining semantic correctness and code quality.
 
 ## License
 
-This is a research/learning project. Refer to htop's GPL-2.0 license for any use of translated code.
+This is a research/learning project. Ensure you respect the license of any source code you translate.

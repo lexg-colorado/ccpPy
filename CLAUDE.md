@@ -4,10 +4,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a RAG-based code translation system that automatically converts the htop C codebase (~37k total lines, ~29k C code) to Python using dependency-aware context retrieval and local LLMs via Ollama.
+This is a RAG-based code translation system that automatically converts C codebases to Python using dependency-aware context retrieval and local LLMs via Ollama.
 
-**Target Source**: htop repository at `~/Python/htop`
 **Key Insight**: This project demonstrates how "unlimited context" translation tools work by using smart chunking, dependency-aware retrieval, iterative processing, and semantic indexing.
+
+**Configuration**: Edit `config.yaml` to point to your C source directory:
+```yaml
+source:
+  source_path: "/path/to/your/c/project"
+```
 
 ## Development Commands
 
@@ -26,8 +31,8 @@ ollama serve
 The translation pipeline has 4 phases that must be run sequentially:
 
 ```bash
-# Phase 1: Parse htop C code into AST representation ✅ WORKING
-python scripts/01_parse_htop.py
+# Phase 1: Parse C code into AST representation ✅ WORKING
+python scripts/01_parse_c_code.py
 # Output: Creates data/asts/*.json files and data/asts/parse_summary.json
 # Features: Parallel processing, caching, progress bars, statistics
 
@@ -112,7 +117,7 @@ C Source → AST Parser → Dependency Graph → Vector Store → RAG Translator
 ### Configuration System
 
 All settings are centralized in `config.yaml`:
-- **Source paths**: htop source location and filters
+- **Source paths**: C source location and filters
 - **Output paths**: Data cache and Python output directories
 - **Parsing**: File extensions and size limits
 - **Embeddings**: Model type (sentence-transformers/all-MiniLM-L6-v2), chunk size, batch size
@@ -154,7 +159,7 @@ Access config values using `Config().get('section.key', default_value)` with dot
 
 - [x] Project structure created
 - [x] Configuration system implemented
-- [x] **Phase 1 Complete: AST Parser** (`src/parser/ast_parser.py`, `scripts/01_parse_htop.py`)
+- [x] **Phase 1 Complete: AST Parser** (`src/parser/ast_parser.py`, `scripts/01_parse_c_code.py`)
   - Fixed tree-sitter language initialization (2025-12-01)
   - `CParser` class: Extracts functions, structs, includes, and call relationships from C files
   - `BatchParser` class: Parallel processing, caching, and statistics generation
@@ -235,6 +240,6 @@ Access config values using `Config().get('section.key', default_value)` with dot
 
 ## Success Metrics
 
-**MVP**: Successfully translate 3-5 core htop modules with syntactically valid, functional Python code
+**MVP**: Successfully translate core C modules with syntactically valid, functional Python code
 
-**Full Success**: Translate 80%+ of htop functionality while maintaining semantic correctness and code quality
+**Full Success**: Translate 80%+ of C codebase functionality while maintaining semantic correctness and code quality

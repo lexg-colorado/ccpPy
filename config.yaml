@@ -1,8 +1,8 @@
-# htop-translator configuration
+# C-to-Python Translator Configuration
 
 # Source code paths
 source:
-  htop_path: "/home/lex/Python/htop"
+  source_path: "/home/lex/Python/htop"
   # Specific subdirectories to focus on (empty = all)
   include_dirs: []
   # File patterns to exclude
@@ -19,7 +19,7 @@ output:
   graphs: "data/graphs"
   embeddings: "data/embeddings"
   translation_memory: "data/translation_memory"
-  python_output: "output/htop_py"
+  python_output: "output/python_output"
 
 # Parsing configuration
 parsing:
