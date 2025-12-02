@@ -44,3 +44,7 @@ htmlcov/
 
 # Tree-sitter
 parser.so
+
+# Internal documentation (not for public repo)
+CLAUDE.md
+GAMEPLAN.md
