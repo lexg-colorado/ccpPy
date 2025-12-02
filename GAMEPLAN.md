@@ -694,6 +694,80 @@ The complete pipeline now works end-to-end:
 
 **Next**: Production use - translate actual htop modules and refine based on results.
 
+### 2025-12-01: Translation Quality Improvements
+**Problem**: Initial translations had lower success rates due to:
+- qwen3 model quirks with token limits
+- Markdown code fences confusing the LLM
+- Insufficient debugging information
+- Variable initialization issues in retry logic
+
+**Improvements Implemented**:
+
+**1. qwen3 Model Compatibility Fix** (`src/translation/llm_client.py`):
+- **Issue**: qwen3 model has problems when `num_predict` (max_tokens) is set to values < 1024
+- **Fix**: Changed to only set `num_predict` if >= 1024, otherwise use model default
+- **Impact**: Prevents truncated or empty responses from LLM
+
+**2. Prompt Format Optimization** (`src/translation/prompt_builder.py`):
+- **Issue**: Markdown code fences (```) in prompts caused LLM confusion about code boundaries
+- **Fix**: Removed all code fences from:
+  * Few-shot examples
+  * Target function formatting
+  * Retry prompts
+- **Impact**: Cleaner output, less format confusion, higher success rate
+
+**3. Debug & Logging Infrastructure** (`scripts/04_translate.py`, `src/translation/translator.py`):
+- **Added**: `--verbose` flag for DEBUG level logging
+- **Added**: `--debug` flag to save failed translations
+- **Added**: `_save_failed_attempt()` method that saves:
+  * Function name and attempt number
+  * Failure type (parse_failed vs validation_failed)
+  * Full prompt sent to LLM (first 3000 chars)
+  * LLM response (first 2000 chars)
+  * Parsed Python code (if any)
+  * Validation results
+- **Output**: Saves to `debug/failed_translations/{func_name}_attempt{N}_{type}.json`
+- **Impact**: Much easier to diagnose and fix translation issues
+
+**4. Translator Robustness Improvements** (`src/translation/translator.py`):
+- **Fixed**: Uninitialized variable bugs:
+  * `validation_result` - now initialized before retry loop
+  * `original_prompt` - now set on first attempt
+  * `previous_output` - now initialized at start
+- **Added**: Comprehensive logging at each step:
+  * Prompt length and preview
+  * LLM response length and preview
+  * Parse success/failure
+  * Validation results with errors
+  * Exception tracking with type and traceback
+- **Improved**: Error messages now include:
+  * Truncated error summaries (first 3 errors)
+  * Exception type names
+  * Detailed logging for debugging
+- **Impact**: More robust retry logic, better error tracking, easier debugging
+
+**Results**:
+- ✅ Higher translation success rate
+- ✅ Better LLM output quality
+- ✅ Easier debugging of failed translations
+- ✅ More informative error messages
+- ✅ No more uninitialized variable crashes
+
+**CLI Usage**:
+```bash
+# Standard translation
+python scripts/04_translate.py --limit 10
+
+# With verbose logging
+python scripts/04_translate.py --limit 10 --verbose
+
+# With debug mode (saves failed attempts)
+python scripts/04_translate.py --limit 10 --debug
+
+# Full debugging
+python scripts/04_translate.py --limit 10 --verbose --debug
+```
+
 ---
 
 *Last Updated: 2025-12-01*

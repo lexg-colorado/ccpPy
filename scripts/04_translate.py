@@ -34,10 +34,11 @@ from utils.logger import setup_logger
 class TranslationOrchestrator:
     """Orchestrate the translation of htop C codebase to Python."""
     
-    def __init__(self, config: Config, logger):
+    def __init__(self, config: Config, logger, debug_mode: bool = False):
         """Initialize translation orchestrator with configuration."""
         self.config = config
         self.logger = logger
+        self.debug_mode = debug_mode
         
         # Get paths
         self.cache_dir = Path(config.get('output.ast_cache'))
@@ -112,7 +113,9 @@ class TranslationOrchestrator:
                 prompt_builder=self.prompt_builder,
                 validator=self.validator,
                 vector_store=self.vector_store,
-                max_iterations=trans_config.get('max_iterations', 3)
+                max_iterations=trans_config.get('max_iterations', 3),
+                debug_mode=self.debug_mode,
+                logger=self.logger
             )
             
             # Load existing translation memory if available
@@ -333,6 +336,8 @@ def main():
     parser.add_argument('--limit', type=int, help='Limit number of functions to translate')
     parser.add_argument('--no-leaves', action='store_true', help='Don\'t prioritize leaf nodes')
     parser.add_argument('--dry-run', action='store_true', help='Show what would be translated')
+    parser.add_argument('--verbose', '-v', action='store_true', help='Verbose logging (DEBUG level)')
+    parser.add_argument('--debug', action='store_true', help='Save failed translations to debug/ folder')
     
     args = parser.parse_args()
     
@@ -340,8 +345,8 @@ def main():
     config_path = project_root / "config.yaml"
     config = Config(str(config_path))
     
-    # Setup logging
-    log_level = config.get('logging.level', 'INFO')
+    # Setup logging (override with verbose flag)
+    log_level = 'DEBUG' if args.verbose else config.get('logging.level', 'INFO')
     log_file = config.get('logging.file', 'logs/translator.log')
     logger = setup_logger("translator", level=log_level, log_file=log_file)
     
@@ -351,7 +356,7 @@ def main():
     
     try:
         # Create orchestrator
-        orchestrator = TranslationOrchestrator(config, logger)
+        orchestrator = TranslationOrchestrator(config, logger, debug_mode=args.debug)
         
         # Initialize
         if not orchestrator.initialize():

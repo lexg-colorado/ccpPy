@@ -95,12 +95,14 @@ This was a compatibility issue with modern tree-sitter Python bindings. The fix 
   - Context retrieval for RAG translation
   - `03_index_code.py` script fully functional
 - [x] **Phase 4 Complete: RAG-Based Translation Engine**
-  - Ollama LLM integration (qwen3:4b)
+  - Ollama LLM integration (qwen3:4b) with fixes for model quirks
   - RAG-aware prompt construction with few-shot examples
   - Retry mechanism with validation feedback (max 3 iterations)
   - Comprehensive Python code validation (syntax, type hints, PEP 8)
   - Translation memory for consistency
   - Quality scoring (0-10 scale)
+  - Debug mode with failed translation logging
+  - Verbose logging for troubleshooting
   - `04_translate.py` script fully functional
 - [x] **Validation Suite** (integrated into Phase 4)
   - Syntax validation, type hints, docstrings, PEP 8 checks

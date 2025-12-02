@@ -73,7 +73,7 @@ class OllamaClient:
         self,
         prompt: str,
         system_prompt: Optional[str] = None,
-        max_tokens: int = 4096
+        max_tokens: Optional[int] = None
     ) -> str:
         """
         Generate text using Ollama API.
@@ -81,7 +81,7 @@ class OllamaClient:
         Args:
             prompt: User prompt
             system_prompt: Optional system prompt
-            max_tokens: Maximum tokens to generate
+            max_tokens: Maximum tokens to generate (None = use model default)
             
         Returns:
             Generated text
@@ -97,10 +97,13 @@ class OllamaClient:
                     "prompt": prompt,
                     "stream": False,
                     "options": {
-                        "temperature": self.temperature,
-                        "num_predict": max_tokens
+                        "temperature": self.temperature
                     }
                 }
+                
+                # Only set num_predict if specified and >= 1024 (qwen3 issue with low values)
+                if max_tokens and max_tokens >= 1024:
+                    payload["options"]["num_predict"] = max_tokens
                 
                 if system_prompt:
                     payload["system"] = system_prompt
@@ -114,7 +117,15 @@ class OllamaClient:
                 
                 if response.status_code == 200:
                     result = response.json()
-                    return result.get('response', '')
+                    response_text = result.get('response', '')
+                    
+                    # Debug: Check if response is actually empty
+                    if not response_text and hasattr(self, 'debug_mode'):
+                        print(f"DEBUG: Empty response from Ollama")
+                        print(f"DEBUG: Full JSON response keys: {result.keys()}")
+                        print(f"DEBUG: 'response' field value: '{result.get('response')}'")
+                    
+                    return response_text
                 else:
                     error_msg = f"API error (status {response.status_code})"
                     if attempt < self.max_retries - 1:

@@ -40,7 +40,9 @@ class FunctionTranslator:
         prompt_builder: PromptBuilder,
         validator: CodeValidator,
         vector_store,
-        max_iterations: int = 3
+        max_iterations: int = 3,
+        debug_mode: bool = False,
+        logger=None
     ):
         """
         Initialize function translator.
@@ -51,6 +53,8 @@ class FunctionTranslator:
             validator: Code validation service
             vector_store: Vector store for RAG
             max_iterations: Maximum translation attempts
+            debug_mode: Whether to save debug information
+            logger: Logger instance
         """
         self.llm_client = llm_client
         self.prompt_builder = prompt_builder
@@ -58,6 +62,8 @@ class FunctionTranslator:
         self.vector_store = vector_store
         self.max_iterations = max_iterations
         self.translation_memory = {}
+        self.debug_mode = debug_mode
+        self.logger = logger
     
     def translate_function(
         self,
@@ -89,6 +95,11 @@ class FunctionTranslator:
         # Build system prompt
         system_prompt = self.prompt_builder.build_system_prompt()
         
+        # Initialize variables for retry logic
+        validation_result = None
+        previous_output = ""
+        original_prompt = ""
+        
         # Try translation with retries
         for attempt in range(1, self.max_iterations + 1):
             try:
@@ -99,16 +110,23 @@ class FunctionTranslator:
                         rag_context,
                         self.translation_memory
                     )
-                else:
-                    # Retry with validation errors
-                    prompt = self.prompt_builder.build_retry_prompt(
-                        original_prompt,
-                        previous_output,
-                        validation_result.errors
-                    )
-                
-                if attempt == 1:
                     original_prompt = prompt
+                else:
+                    # Retry with validation errors (check if validation_result exists)
+                    if validation_result and hasattr(validation_result, 'errors'):
+                        prompt = self.prompt_builder.build_retry_prompt(
+                            original_prompt,
+                            previous_output,
+                            validation_result.errors
+                        )
+                    else:
+                        # First attempt failed before validation, use original prompt
+                        prompt = original_prompt
+                
+                # Log prompt for debugging
+                self.logger.debug(f"Sending prompt for {func_name} (attempt {attempt}): {len(prompt)} chars")
+                if self.debug_mode:
+                    self.logger.debug(f"Full prompt:\n{prompt[:1000]}...")
                 
                 # Call LLM
                 llm_response = self.llm_client.generate(
@@ -116,18 +134,30 @@ class FunctionTranslator:
                     system_prompt=system_prompt
                 )
                 
+                self.logger.debug(f"LLM response for {func_name} (attempt {attempt}): {len(llm_response)} chars")
+                self.logger.debug(f"Response preview: {llm_response[:300]}...")
+                
                 # Parse and clean output
                 python_code = self._parse_output(llm_response)
                 
                 if not python_code:
+                    self.logger.warning(f"Failed to parse LLM output for {func_name} (attempt {attempt})")
+                    self.logger.debug(f"Unparseable LLM output:\n{llm_response[:500]}")
                     previous_output = llm_response
+                    
+                    # Save failed parsing attempt if debug mode
+                    if hasattr(self, 'debug_mode') and self.debug_mode:
+                        self._save_failed_attempt(func_name, llm_response, "", None, attempt, "parse_failed", prompt)
                     continue
+                else:
+                    self.logger.debug(f"Successfully parsed {len(python_code)} chars of Python code")
                 
                 # Validate
                 validation_result = self.validator.validate(python_code)
                 
                 if validation_result.is_valid:
                     # Success!
+                    self.logger.debug(f"Validation passed for {func_name} (score: {validation_result.quality_score})")
                     result = TranslationResult(
                         function_name=func_name,
                         success=True,
@@ -144,10 +174,21 @@ class FunctionTranslator:
                     return result
                 
                 # Validation failed, prepare for retry
+                self.logger.info(f"Validation failed for {func_name} (attempt {attempt}/{self.max_iterations}):")
+                for error in validation_result.errors:
+                    self.logger.info(f"  ✗ {error}")
+                for warning in validation_result.warnings[:3]:  # Limit warnings
+                    self.logger.debug(f"  ⚠ {warning}")
+                
                 previous_output = python_code
+                
+                # Save failed validation if debug mode
+                if hasattr(self, 'debug_mode') and self.debug_mode:
+                    self._save_failed_attempt(func_name, llm_response, python_code, validation_result, attempt, "validation_failed", prompt)
                 
                 if attempt == self.max_iterations:
                     # Final attempt failed
+                    error_summary = "; ".join(validation_result.errors[:3])
                     return TranslationResult(
                         function_name=func_name,
                         success=False,
@@ -155,11 +196,19 @@ class FunctionTranslator:
                         c_code=c_code,
                         validation=validation_result,
                         attempts=attempt,
-                        error_message=f"Validation failed after {attempt} attempts",
+                        error_message=f"Validation failed: {error_summary}",
                         dependencies=dependencies
                     )
                     
             except Exception as e:
+                error_type = type(e).__name__
+                error_msg = f"{error_type}: {str(e)}"
+                self.logger.error(f"Exception in translation attempt {attempt} for {func_name}: {error_msg}")
+                
+                if hasattr(self, 'debug_mode') and self.debug_mode:
+                    import traceback
+                    self.logger.debug(f"Traceback:\n{traceback.format_exc()}")
+                
                 if attempt == self.max_iterations:
                     return TranslationResult(
                         function_name=func_name,
@@ -168,7 +217,7 @@ class FunctionTranslator:
                         c_code=c_code,
                         validation=None,
                         attempts=attempt,
-                        error_message=str(e),
+                        error_message=error_msg,
                         dependencies=dependencies
                     )
                 previous_output = ""
@@ -248,6 +297,53 @@ class FunctionTranslator:
             'return_type': func_data.get('return_type', ''),
             'parameters': func_data.get('parameters', [])
         }
+    
+    def _save_failed_attempt(
+        self,
+        func_name: str,
+        llm_response: str,
+        python_code: str,
+        validation_result: Optional[ValidationResult],
+        attempt: int,
+        failure_type: str,
+        prompt: str = ""
+    ) -> None:
+        """
+        Save failed translation attempt for debugging.
+        
+        Args:
+            func_name: Name of function
+            llm_response: Raw LLM output
+            python_code: Parsed Python code (may be empty)
+            validation_result: Validation result if available
+            attempt: Attempt number
+            failure_type: Type of failure (parse_failed, validation_failed, etc.)
+            prompt: The prompt that was sent to LLM
+        """
+        from dataclasses import asdict
+        
+        debug_dir = Path("debug/failed_translations")
+        debug_dir.mkdir(parents=True, exist_ok=True)
+        
+        debug_file = debug_dir / f"{func_name}_attempt{attempt}_{failure_type}.json"
+        
+        debug_data = {
+            'function_name': func_name,
+            'attempt': attempt,
+            'failure_type': failure_type,
+            'prompt_length': len(prompt),
+            'prompt': prompt[:3000],  # Save first 3000 chars
+            'llm_response_length': len(llm_response),
+            'llm_response': llm_response[:2000] if llm_response else "(empty)",
+            'parsed_code': python_code[:2000] if python_code else "(empty)",
+            'validation': asdict(validation_result) if validation_result else None
+        }
+        
+        with open(debug_file, 'w', encoding='utf-8') as f:
+            json.dump(debug_data, f, indent=2, ensure_ascii=False)
+        
+        if self.logger:
+            self.logger.debug(f"Saved debug info to {debug_file}")
     
     def save_translation_memory(self, output_path: Path) -> None:
         """

@@ -144,14 +144,10 @@ IMPORTANT: Your response must contain ONLY valid Python code, nothing else."""
                 if py_code:
                     example_text = f"""EXAMPLE {i} (similarity: {similarity:.2f}):
 C Code:
-```c
-{c_code[:300]}  # Truncated for brevity
-```
+{c_code[:300]}
 
 Python Translation:
-```python
-{py_code}
-```"""
+{py_code}"""
                     examples.append(example_text)
         
         if examples:
@@ -166,9 +162,9 @@ Python Translation:
         name = func_data.get('name', 'unknown')
         
         return f"""FUNCTION TO TRANSLATE:
-```c
+
+C Code:
 {body}
-```
 
 Translate the above C function '{name}' to Python."""
     
@@ -211,9 +207,7 @@ Start directly with 'def function_name...'"""
 {errors_text}
 
 PREVIOUS ATTEMPT:
-```python
 {previous_output}
-```
 
 Please fix these issues and provide a corrected translation.
 

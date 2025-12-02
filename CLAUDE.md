@@ -45,13 +45,17 @@ python scripts/03_index_code.py
 #           context retrieval for RAG
 
 # Phase 4: Translate code with RAG context retrieval ✅ WORKING
-python scripts/04_translate.py --limit 10  # Translate first 10 functions
-python scripts/04_translate.py --dry-run   # Preview without translating
+python scripts/04_translate.py --limit 10       # Translate first 10 functions
+python scripts/04_translate.py --dry-run        # Preview without translating
+python scripts/04_translate.py --verbose        # DEBUG level logging
+python scripts/04_translate.py --debug --limit 5  # Save failed translations to debug/
 # Output: Creates output/python/*.py files, translation_stats.json
 #         Creates memory/translations.json (translation memory)
-# Features: Ollama LLM integration, RAG with few-shot examples,
-#           retry with validation feedback, comprehensive code validation,
-#           quality scoring, translation memory
+#         Creates debug/failed_translations/*.json (if --debug used)
+# Features: Ollama LLM integration (with qwen3 quirk fixes),
+#           RAG with few-shot examples, retry with validation feedback,
+#           comprehensive code validation, quality scoring, translation memory,
+#           debug mode for troubleshooting failed translations
 ```
 
 ### Testing
