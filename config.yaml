@@ -1,8 +1,19 @@
-# C-to-Python Translator Configuration
+# C/C++ to Python Translator Configuration
+
+# Project settings
+project:
+  # Project name (for logging and output organization)
+  name: "c-translator"
+  # Optional: Load settings from a profile (profiles/*.yaml)
+  # Profile settings override config settings when specified
+  profile: null
 
 # Source code paths
 source:
+  # Path to C/C++ source code
   source_path: "/home/lex/Python/htop"
+  # Source language: "c", "cpp", or "auto" (detect from extensions)
+  language: "c"
   # Specific subdirectories to focus on (empty = all)
   include_dirs: []
   # File patterns to exclude
@@ -23,12 +34,31 @@ output:
 
 # Parsing configuration
 parsing:
-  # File extensions to parse
+  # File extensions to parse (by language)
   extensions:
-    - ".c"
-    - ".h"
+    c:
+      - ".c"
+      - ".h"
+    cpp:
+      - ".cpp"
+      - ".cxx"
+      - ".cc"
+      - ".hpp"
+      - ".hxx"
+      - ".hh"
+  # Default language for .h files: "c" or "cpp"
+  header_language: "c"
   # Maximum file size to parse (in MB)
   max_file_size_mb: 10
+
+# C++ specific settings
+cpp:
+  # Parse C++ template definitions
+  parse_templates: true
+  # Parse namespace declarations
+  parse_namespaces: true
+  # Include C++ standard library mappings
+  include_std_library: false
 
 # Dependency graph settings
 dependency_graph:
@@ -57,13 +87,27 @@ vector_store:
   # Number of results to retrieve
   top_k: 5
 
-# LLM configuration (Ollama)
+# LLM configuration
 llm:
-  # Ollama endpoint
-  base_url: "http://localhost:11434"
-  # Model to use for translation
-  model: "qwen3:4b"
-  # Generation parameters
+  # Backend provider: "ollama", "openai", "anthropic"
+  backend: "ollama"
+
+  # Ollama settings (used when backend: "ollama")
+  ollama:
+    base_url: "http://localhost:11434"
+    model: "qwen3:4b"
+
+  # OpenAI settings (used when backend: "openai")
+  openai:
+    # API key loaded from OPENAI_API_KEY environment variable
+    model: "gpt-4"
+
+  # Anthropic settings (used when backend: "anthropic")
+  anthropic:
+    # API key loaded from ANTHROPIC_API_KEY environment variable
+    model: "claude-3-sonnet-20240229"
+
+  # Generation parameters (apply to all backends)
   temperature: 0.2
   top_p: 0.9
   max_tokens: 4096
@@ -80,6 +124,31 @@ translation:
   include_examples: true
   # Number of similar examples to include
   num_examples: 3
+
+  # Python output style preferences
+  python_style:
+    # Generate type hints in output
+    use_type_hints: true
+    # Use dataclasses for C structs
+    use_dataclasses: true
+    # Docstring style: "google", "numpy", "sphinx"
+    docstring_style: "google"
+    # Maximum line length (for formatting)
+    line_length: 88
+    # Target Python version (for compatibility)
+    python_version: "3.9"
+
+# Library mappings configuration
+library_mappings:
+  # Enable library mapping system
+  enabled: true
+  # Built-in mappers to use
+  builtin_mappers:
+    - "stdlib"      # C standard library
+    - "ncurses"     # ncurses -> curses
+    - "pthread"     # pthread -> threading
+  # Paths to custom mapping YAML files (relative to project root)
+  custom_mappings: []
 
 # Validation settings
 validation:
@@ -114,5 +183,3 @@ experimental:
   few_shot_translation: true
   # Attempt to preserve code comments
   preserve_comments: true
-  # Generate type hints in Python output
-  generate_type_hints: true

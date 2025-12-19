@@ -1,0 +1,45 @@
+# Example Project Profile
+# Copy this file and customize for your C/C++ project
+
+# Required: Profile name (used to reference this profile)
+name: example
+
+# Required: Path to the C/C++ source code
+source_path: "/path/to/your/project"
+
+# Language setting: "c", "cpp", or "mixed"
+language: c
+
+# Directories to include (empty = all directories)
+include_dirs: []
+
+# Patterns to exclude from parsing
+exclude_patterns:
+  - "*.o"
+  - "*.a"
+  - "build/*"
+  - "test/*"
+  - ".git/*"
+
+# Project-specific library mappings (C library -> Python module)
+# These override or extend the built-in mappings
+library_mappings:
+  # Example: map project-specific libraries
+  # mylib: myproject.lib
+
+# Python output style
+target_python_style: modern  # "modern" or "legacy"
+use_dataclasses: true        # Use dataclasses for structs
+use_type_hints: true         # Generate type hints
+docstring_style: google      # "google", "numpy", or "sphinx"
+
+# Naming conventions (for consistent translation)
+naming_conventions:
+  # struct_prefix: ""         # Prefix to strip from struct names
+  # function_style: snake_case  # Output function naming style
+
+# C++ specific settings (only used when language is "cpp" or "mixed")
+cpp_settings:
+  parse_templates: true       # Parse template definitions
+  parse_namespaces: true      # Parse namespace declarations
+  include_std_library: false  # Include std:: library mappings

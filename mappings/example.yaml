@@ -1,0 +1,45 @@
+# Example Custom Library Mappings
+# Copy this file and customize for your project's specific libraries
+
+# Provider name (used for registration)
+name: example_mappings
+
+# Function mappings: C function -> Python equivalent
+functions:
+  # Example: Project-specific initialization function
+  # - c_library: mylib.h
+  #   c_function: my_init
+  #   python_module: myproject
+  #   python_function: initialize
+  #   notes: "Call this before using other functions"
+
+  # Example: Custom memory allocator
+  # - c_library: mylib.h
+  #   c_function: my_alloc
+  #   python_module: builtins
+  #   python_function: None
+  #   notes: "Python handles memory automatically"
+
+  # Example: Custom string function
+  # - c_library: mylib.h
+  #   c_function: my_strdup
+  #   python_module: builtins
+  #   python_function: str
+  #   notes: "Use str() or string slicing"
+
+# Type mappings: C type -> Python type
+types:
+  # Example: Project-specific struct
+  # - c_type: MyStruct*
+  #   python_type: MyClass
+  #   import_required: myproject.types
+
+  # Example: Custom handle type
+  # - c_type: handle_t
+  #   python_type: int
+  #   transform: "Treat as opaque integer handle"
+
+  # Example: Callback function type
+  # - c_type: callback_fn
+  #   python_type: Callable
+  #   import_required: typing

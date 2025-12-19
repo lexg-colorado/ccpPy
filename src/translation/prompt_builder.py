@@ -3,23 +3,33 @@ Prompt Builder for C-to-Python translation.
 Constructs prompts with RAG context and few-shot examples.
 """
 
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, TYPE_CHECKING
 from pathlib import Path
+
+if TYPE_CHECKING:
+    from .library_mapper import LibraryMapperRegistry
 
 
 class PromptBuilder:
     """Build structured prompts for LLM translation."""
-    
-    def __init__(self, include_examples: bool = True, num_examples: int = 3):
+
+    def __init__(
+        self,
+        include_examples: bool = True,
+        num_examples: int = 3,
+        library_mapper: Optional['LibraryMapperRegistry'] = None
+    ):
         """
         Initialize prompt builder.
-        
+
         Args:
             include_examples: Whether to include few-shot examples
             num_examples: Number of similar examples to include
+            library_mapper: Optional library mapper for C->Python hints
         """
         self.include_examples = include_examples
         self.num_examples = num_examples
+        self._library_mapper = library_mapper
     
     def build_system_prompt(self) -> str:
         """
@@ -52,20 +62,25 @@ IMPORTANT: Your response must contain ONLY valid Python code, nothing else."""
     ) -> str:
         """
         Build complete translation prompt with context.
-        
+
         Args:
             func_data: Function data from AST parser
             rag_context: RAG context with similar examples
             translation_memory: Previously translated functions
-            
+
         Returns:
             Complete prompt string
         """
         prompt_parts = []
-        
+
         # Add function context
         prompt_parts.append(self._format_function_context(func_data))
-        
+
+        # Add library mapping hints if mapper is available
+        library_hints = self._format_library_hints(func_data)
+        if library_hints:
+            prompt_parts.append(library_hints)
+
         # Add few-shot examples if available
         if self.include_examples and rag_context:
             examples_text = self._format_few_shot_examples(
@@ -74,14 +89,49 @@ IMPORTANT: Your response must contain ONLY valid Python code, nothing else."""
             )
             if examples_text:
                 prompt_parts.append(examples_text)
-        
+
         # Add the function to translate
         prompt_parts.append(self._format_target_function(func_data))
-        
+
         # Add requirements
         prompt_parts.append(self._format_requirements())
-        
+
         return "\n\n".join(prompt_parts)
+
+    def _format_library_hints(self, func_data: Dict[str, Any]) -> str:
+        """
+        Format library mapping hints for functions called.
+
+        Args:
+            func_data: Function data containing calls and parameter types
+
+        Returns:
+            Formatted library hints string or empty string
+        """
+        if not self._library_mapper:
+            return ""
+
+        # Get functions called
+        calls = func_data.get('calls', [])
+
+        # Get types from parameters and return type
+        types = []
+        params = func_data.get('parameters', [])
+        for p in params:
+            ptype = p.get('type', '')
+            if ptype:
+                types.append(ptype)
+
+        return_type = func_data.get('return_type', '')
+        if return_type and return_type != 'void':
+            types.append(return_type)
+
+        # Generate hints using the mapper
+        return self._library_mapper.format_hints_for_prompt(
+            c_functions=calls,
+            c_types=types if types else None,
+            max_hints=15
+        )
     
     def _format_function_context(self, func_data: Dict[str, Any]) -> str:
         """Format function metadata context."""

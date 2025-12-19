@@ -1,6 +1,7 @@
 # Core parsing and analysis
 tree-sitter==0.21.3
 tree-sitter-c==0.21.4
+tree-sitter-cpp==0.21.0
 
 # Graph analysis and visualization
 networkx==3.2.1
