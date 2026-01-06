@@ -1,53 +1,60 @@
-# htop C-to-Python Translator
+# C2Py - RAG-Based C/C++ to Python Translator
 
-A proof-of-concept RAG-based code translation system that automatically converts the htop C codebase to Python using dependency-aware context retrieval and local LLMs.
+A local-first code translation system that converts C/C++ codebases to Python using dependency-aware RAG (Retrieval-Augmented Generation) and local LLMs via Ollama.
 
-## Overview
+## Features
 
-This project explores how commercial "unlimited context" code translation tools actually work by building a transparent implementation using:
-- **AST parsing** for code structure extraction
-- **Dependency graph analysis** for intelligent context retrieval
-- **Semantic embeddings** for finding similar code patterns
-- **Local LLM (qwen3:4b)** for translation via Ollama
+- **AST-Based Parsing**: Uses tree-sitter for accurate C and C++ code structure extraction
+- **Dependency-Aware Translation**: Builds call graphs to translate in optimal order (leaf nodes first)
+- **Semantic Code Search**: FAISS-powered vector search finds similar code patterns for context
+- **Local LLM Integration**: Uses Ollama for privacy-preserving, cost-free translation
+- **Validation Pipeline**: Automatic syntax, type hint, and PEP 8 validation
+- **Translation Memory**: Maintains consistency across related code translations
+- **Multi-Language Support**: Handles both C and C++ source files
+- **Iterative Refinement**: Retries failed translations with validation feedback
 
-## Project Structure
+## Requirements
 
-See `GAMEPLAN.md` for detailed architecture and implementation plan.
+- Python 3.9+
+- [Ollama](https://ollama.ai/) with a supported model (default: qwen3:4b)
+- 8GB RAM recommended
 
-```
-├── src/           # Core translation pipeline
-├── scripts/       # CLI tools for each phase
-├── data/          # Cached analysis (gitignored)
-├── output/        # Translated Python code (gitignored)
-└── tests/         # Unit tests
+## Installation
+
+```bash
+# Clone the repository
+git clone https://github.com/lexg-colorado/ccpPy.git
+cd ccpPy
+
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  # Linux/Mac
+# or: venv\Scripts\activate  # Windows
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Pull the LLM model
+ollama pull qwen3:4b
 ```
 
 ## Quick Start
 
-### 1. Install Dependencies
+### 1. Configure Your Project
 
-```bash
-# Install tree-sitter with C language support
-pip install -r requirements.txt
+Edit `config.yaml` to point to your C/C++ source:
 
-# Ensure Ollama is running with qwen3:4b
-ollama pull qwen3:4b
-ollama serve
-```
-
-### 2. Configure Paths
-
-Edit `config.yaml` to point to your htop source directory:
 ```yaml
 source:
-  htop_path: "/home/lex/Python/htop"
+  source_path: "/path/to/your/c/project"
+  language: "c"  # or "cpp" or "auto"
 ```
 
-### 3. Run the Pipeline
+### 2. Run the Pipeline
 
 ```bash
-# Phase 1: Parse htop C code
-python scripts/01_parse_htop.py
+# Phase 1: Parse source code into AST
+python scripts/01_parse_c_code.py
 
 # Phase 2: Build dependency graph
 python scripts/02_build_graph.py
@@ -55,64 +62,187 @@ python scripts/02_build_graph.py
 # Phase 3: Create semantic index
 python scripts/03_index_code.py
 
-# Phase 4: Translate code
-python scripts/04_translate.py --module Process
+# Phase 4: Translate to Python
+python scripts/04_translate.py --limit 10
 ```
 
-## Development Workflow
+## CLI Reference
 
-1. **Start small**: Translate a single module first (e.g., Process.c)
-2. **Validate early**: Check Python syntax and basic functionality
-3. **Iterate**: Refine prompts based on translation quality
-4. **Scale up**: Gradually translate more complex modules
+### Parse C/C++ Code
 
-## Troubleshooting
+```bash
+python scripts/01_parse_c_code.py [OPTIONS]
 
-### tree-sitter Language Initialization Error
+Options:
+  --lang LANG      Language to parse (c, cpp, auto)
+  --force          Force re-parsing of all files
+  --verbose        Enable debug logging
+  --profile NAME   Use a project profile from profiles/
+```
 
-If you encounter `TypeError: Language.__init__() missing 1 required positional argument: 'name'`:
+### Build Dependency Graph
 
-This was a compatibility issue with modern tree-sitter Python bindings. The fix has been applied in `src/parser/ast_parser.py` - the language object from `tree_sitter_c.language()` is now assigned directly without wrapping in `Language()`.
+```bash
+python scripts/02_build_graph.py [OPTIONS]
 
-## Current Status
+Options:
+  --lang LANG        Language to analyze
+  --analyze-only     Only show analysis, don't save
+  --output-format    Output format (pickle, json, both)
+  --verbose          Enable debug logging
+```
 
-- [x] Project structure created
-- [x] **Phase 1 Complete: AST Parser Implementation**
-  - CParser class extracts functions, structs, includes, and call relationships
-  - BatchParser handles parallel file processing with caching
-  - `01_parse_htop.py` script fully functional
-  - Generates comprehensive statistics and summaries
-- [x] **Phase 2 Complete: Dependency Graph Builder**
-  - Function call graph (who calls whom)
-  - File dependency graph (include relationships)
-  - Topological sort for optimal translation order
-  - Cycle detection and strongly connected components
-  - `02_build_graph.py` script fully functional
-- [x] **Phase 3 Complete: Semantic Indexing**
-  - Sentence-transformers embeddings (all-MiniLM-L6-v2)
-  - FAISS vector index for fast similarity search
-  - Function-to-function similarity matching
-  - Context retrieval for RAG translation
-  - `03_index_code.py` script fully functional
-- [x] **Phase 4 Complete: RAG-Based Translation Engine**
-  - Ollama LLM integration (qwen3:4b) with fixes for model quirks
-  - RAG-aware prompt construction with few-shot examples
-  - Retry mechanism with validation feedback (max 3 iterations)
-  - Comprehensive Python code validation (syntax, type hints, PEP 8)
-  - Translation memory for consistency
-  - Quality scoring (0-10 scale)
-  - Debug mode with failed translation logging
-  - Verbose logging for troubleshooting
-  - `04_translate.py` script fully functional
-- [x] **Validation Suite** (integrated into Phase 4)
-  - Syntax validation, type hints, docstrings, PEP 8 checks
+### Create Semantic Index
 
-## Goals
+```bash
+python scripts/03_index_code.py [OPTIONS]
 
-**MVP**: Successfully translate 3-5 core htop modules with syntactically valid, functional Python code.
+Options:
+  --lang LANG      Language to index
+  --rebuild        Force rebuild of index
+  --query TEXT     Test query against index
+  --top-k N        Number of results for test query
+  --verbose        Enable debug logging
+```
 
-**Full Success**: Translate 80%+ of htop functionality while maintaining semantic correctness and code quality.
+### Translate Code
+
+```bash
+python scripts/04_translate.py [OPTIONS]
+
+Options:
+  --limit N          Translate only N functions
+  --function NAME    Translate specific function
+  --dry-run          Preview without translating
+  --verbose          Enable debug logging
+  --debug            Save failed translations for analysis
+  --no-leaves        Skip leaf node priority ordering
+  --continue         Resume from previous translation
+  --output-dir DIR   Custom output directory
+```
+
+## Architecture
+
+```
+C/C++ Source -> AST Parser -> Dependency Graph -> Vector Store -> RAG Translator -> Python Output
+                    |              |                   |                |
+              tree-sitter      networkx           FAISS +          Ollama LLM
+                                              sentence-transformers
+```
+
+### Pipeline Phases
+
+| Phase | Component | Description |
+|-------|-----------|-------------|
+| 1 | AST Parser | Extracts functions, structs, includes, call relationships |
+| 2 | Dependency Graph | Builds call graphs, determines translation order |
+| 3 | Semantic Index | Creates embeddings for code similarity search |
+| 4 | Translation | RAG-powered translation with iterative refinement |
+| 5 | Validation | Ensures output quality and correctness |
+
+## How It Works
+
+This project demonstrates how commercial "unlimited context" translation tools work:
+
+1. **Smart Chunking**: Code is parsed into function-level units using tree-sitter AST parsing
+2. **Dependency Ordering**: Translation follows the call graph (leaves first) to ensure dependencies are translated before dependents
+3. **Semantic Retrieval**: Similar code patterns provide few-shot examples via FAISS similarity search
+4. **Iterative Refinement**: Failed translations receive validation feedback and retry (up to 3 attempts)
+5. **Translation Memory**: Maintains C-to-Python entity mappings for consistency
+
+## Configuration
+
+All settings are centralized in `config.yaml`:
+
+| Section | Key Settings |
+|---------|--------------|
+| `source` | Source path, language (c/cpp/auto), exclude patterns |
+| `llm` | Backend (ollama), model (qwen3:4b), temperature, max tokens |
+| `embeddings` | Model (all-MiniLM-L6-v2), chunk size, batch size |
+| `translation` | Max iterations, example count, Python style preferences |
+| `validation` | Syntax check, type check, linting options |
+
+### Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `OLLAMA_HOST` | Ollama server URL | `http://localhost:11434` |
+| `C2PY_CONFIG` | Path to config file | `config.yaml` |
+
+## Library Mappings
+
+Built-in mappings for common C libraries:
+
+| C Library | Python Equivalent |
+|-----------|-------------------|
+| `stdlib.h` | Python builtins, `os`, `sys` |
+| `ncurses.h` | `curses`, `rich`, `textual` |
+| `pthread.h` | `threading`, `concurrent.futures` |
+| `string.h` | Python string methods |
+| `math.h` | `math` module |
+
+Custom mappings can be added in `mappings/` directory.
+
+## Project Structure
+
+```
+c2py/
+├── src/
+│   ├── parser/        # tree-sitter AST parsing (C and C++)
+│   ├── analysis/      # Dependency graph building
+│   ├── indexing/      # Semantic embeddings & FAISS
+│   ├── translation/   # RAG translation engine
+│   ├── validation/    # Python code validation
+│   └── utils/         # Config, logging, CLI utilities
+├── scripts/           # CLI pipeline tools
+├── profiles/          # Project-specific configurations
+├── mappings/          # Custom library mappings
+├── tests/             # Unit tests
+├── data/              # Generated cache (gitignored)
+└── output/            # Translated Python (gitignored)
+```
+
+## Development
+
+```bash
+# Run tests
+pytest
+
+# Run with coverage
+pytest --cov=src tests/
+
+# Format code
+black src/ tests/ scripts/
+isort src/ tests/ scripts/
+
+# Type checking
+mypy src/
+```
+
+## Limitations
+
+- Complex macro expansion may require manual adjustment
+- Platform-specific code needs review
+- Pointer arithmetic is translated to Python idioms (verify correctness)
+- Performance-critical sections may need optimization
+- Deeply interconnected code may exceed context window
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit issues and pull requests.
 
 ## License
 
-This is a research/learning project. Refer to htop's GPL-2.0 license for any use of translated code.
+Apache License 2.0 - See [LICENSE](LICENSE) for details.
+
+## Author
+
+Lex Gaines
+
+## Acknowledgments
+
+- [tree-sitter](https://tree-sitter.github.io/) for robust C/C++ parsing
+- [sentence-transformers](https://www.sbert.net/) for semantic embeddings
+- [FAISS](https://faiss.ai/) for efficient similarity search
+- [Ollama](https://ollama.ai/) for local LLM inference
+- [NetworkX](https://networkx.org/) for dependency graph analysis

@@ -48,3 +48,12 @@ parser.so
 # Internal documentation (not for public repo)
 CLAUDE.md
 GAMEPLAN.md
+CLI-IMPROVEMENT-PLAN.md
+TRANSLATOR-GENERALIZER.md
+*.internal.md
+
+# Claude Code artifacts
+.claude/
+
+# Debug artifacts
+debug/

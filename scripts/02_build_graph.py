@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Phase 2: Build dependency graph from parsed htop codebase.
+Phase 2: Build dependency graph from parsed C codebase.
 
 This script:
 1. Loads parsed AST data from cache
@@ -12,6 +12,7 @@ This script:
 """
 
 import sys
+import argparse
 import json
 import pickle
 from pathlib import Path
@@ -28,6 +29,12 @@ sys.path.insert(0, str(project_root / "src"))
 
 from utils.config import Config
 from utils.logger import setup_logger
+from utils.cli import (
+    create_base_parser,
+    load_config_from_args,
+    handle_list_profiles,
+    error_exit
+)
 
 
 class DependencyGraphBuilder:
@@ -60,7 +67,7 @@ class DependencyGraphBuilder:
         if not summary_path.exists():
             raise FileNotFoundError(
                 f"Parse summary not found at {summary_path}. "
-                "Run scripts/01_parse_htop.py first!"
+                "Run scripts/01_parse_c_code.py first!"
             )
         
         with open(summary_path, 'r') as f:
@@ -175,9 +182,9 @@ class DependencyGraphBuilder:
         if str(relative_path) in self.files:
             return str(relative_path)
         
-        # Try in htop root
-        htop_path = Path(self.config.get('source.htop_path'))
-        root_path = htop_path / include_path
+        # Try in source root
+        source_path = Path(self.config.get('source.source_path'))
+        root_path = source_path / include_path
         if str(root_path) in self.files:
             return str(root_path)
         
@@ -305,42 +312,67 @@ class DependencyGraphBuilder:
         
         return analysis
     
-    def save_graphs(self) -> None:
-        """Save graph data to disk."""
-        self.logger.info("Saving graphs...")
-        
-        # Save as pickle (preserves graph structure)
-        function_graph_path = self.graph_dir / 'function_graph.gpickle'
-        file_graph_path = self.graph_dir / 'file_graph.gpickle'
-        
-        with open(function_graph_path, 'wb') as f:
-            pickle.dump(self.function_graph, f)
-        with open(file_graph_path, 'wb') as f:
-            pickle.dump(self.file_graph, f)
-        
-        self.logger.info(f"Saved function graph to {function_graph_path}")
-        self.logger.info(f"Saved file graph to {file_graph_path}")
-        
-        # Save as JSON for easy inspection
-        function_data = {
-            'nodes': [
-                {
-                    'name': node,
-                    **self.function_graph.nodes[node]
+    def save_graphs(self, output_format: str = 'all') -> None:
+        """
+        Save graph data to disk.
+
+        Args:
+            output_format: Format to save graphs ('json', 'pickle', 'graphml', 'all')
+        """
+        self.logger.info(f"Saving graphs (format: {output_format})...")
+
+        formats_to_save = []
+        if output_format == 'all':
+            formats_to_save = ['pickle', 'json']
+        else:
+            formats_to_save = [output_format]
+
+        for fmt in formats_to_save:
+            if fmt == 'pickle':
+                # Save as pickle (preserves graph structure)
+                function_graph_path = self.graph_dir / 'function_graph.gpickle'
+                file_graph_path = self.graph_dir / 'file_graph.gpickle'
+
+                with open(function_graph_path, 'wb') as f:
+                    pickle.dump(self.function_graph, f)
+                with open(file_graph_path, 'wb') as f:
+                    pickle.dump(self.file_graph, f)
+
+                self.logger.info(f"Saved function graph to {function_graph_path}")
+                self.logger.info(f"Saved file graph to {file_graph_path}")
+
+            elif fmt == 'json':
+                # Save as JSON for easy inspection
+                function_data = {
+                    'nodes': [
+                        {
+                            'name': node,
+                            **self.function_graph.nodes[node]
+                        }
+                        for node in self.function_graph.nodes()
+                    ],
+                    'edges': [
+                        {'from': u, 'to': v}
+                        for u, v in self.function_graph.edges()
+                    ]
                 }
-                for node in self.function_graph.nodes()
-            ],
-            'edges': [
-                {'from': u, 'to': v}
-                for u, v in self.function_graph.edges()
-            ]
-        }
-        
-        function_json_path = self.graph_dir / 'function_graph.json'
-        with open(function_json_path, 'w', encoding='utf-8') as f:
-            json.dump(function_data, f, indent=2)
-        
-        self.logger.info(f"Saved function graph JSON to {function_json_path}")
+
+                function_json_path = self.graph_dir / 'function_graph.json'
+                with open(function_json_path, 'w', encoding='utf-8') as f:
+                    json.dump(function_data, f, indent=2)
+
+                self.logger.info(f"Saved function graph JSON to {function_json_path}")
+
+            elif fmt == 'graphml':
+                # Save as GraphML for visualization tools
+                function_graphml_path = self.graph_dir / 'function_graph.graphml'
+                file_graphml_path = self.graph_dir / 'file_graph.graphml'
+
+                nx.write_graphml(self.function_graph, function_graphml_path)
+                nx.write_graphml(self.file_graph, file_graphml_path)
+
+                self.logger.info(f"Saved function graph to {function_graphml_path}")
+                self.logger.info(f"Saved file graph to {file_graphml_path}")
     
     def save_translation_order(self, sorted_funcs: List[str]) -> None:
         """
@@ -416,48 +448,81 @@ class DependencyGraphBuilder:
         print("\n" + "="*60)
 
 
+def parse_args() -> argparse.Namespace:
+    """Parse command-line arguments."""
+    parser = create_base_parser(
+        description="Phase 2: Build dependency graph from parsed C/C++ codebase."
+    )
+
+    # Add script-specific arguments
+    parser.add_argument(
+        '--output-format',
+        choices=['json', 'pickle', 'graphml', 'all'],
+        default='all',
+        help='Graph output format (default: all)'
+    )
+    parser.add_argument(
+        '--analyze-only',
+        action='store_true',
+        help='Only analyze graphs, do not save to disk'
+    )
+
+    return parser.parse_args()
+
+
 def main():
     """Main entry point for dependency graph building."""
-    # Load configuration
-    config_path = project_root / "config.yaml"
-    config = Config(str(config_path))
-    
-    # Setup logging
-    log_level = config.get('logging.level', 'INFO')
-    log_file = config.get('logging.file', 'logs/translator.log')
-    logger = setup_logger("graph_builder", level=log_level, log_file=log_file)
-    
-    logger.info("="*60)
+    args = parse_args()
+
+    # Handle --list-profiles
+    if handle_list_profiles(args, project_root):
+        return 0
+
+    # Load configuration with CLI args
+    config, logger = load_config_from_args(args, project_root, "graph_builder")
+
+    logger.info("=" * 60)
     logger.info("Starting dependency graph building")
-    logger.info("="*60)
-    
+    logger.info("=" * 60)
+
+    # Show configuration
+    logger.info(f"Source path: {config.get('source.source_path')}")
+    if args.analyze_only:
+        logger.info("Analyze-only mode: graphs will not be saved")
+
     # Create graph builder
     builder = DependencyGraphBuilder(config, logger)
-    
+
     # Load parsed data
-    builder.load_parsed_data()
-    
+    try:
+        builder.load_parsed_data()
+    except FileNotFoundError as e:
+        error_exit(str(e))
+
     # Build graphs
     builder.build_function_call_graph()
     builder.build_file_dependency_graph()
-    
+
     # Analyze graphs
     analysis = builder.analyze_complexity()
-    
+
     # Get translation order
     leaves = builder.identify_leaf_nodes()
     sorted_funcs = builder.topological_sort_functions()
-    
-    # Save everything
-    builder.save_graphs()
-    builder.save_translation_order(sorted_funcs)
-    builder.save_analysis(analysis)
-    
+
+    # Save everything (unless analyze-only)
+    if not args.analyze_only:
+        builder.save_graphs(output_format=args.output_format)
+        builder.save_translation_order(sorted_funcs)
+        builder.save_analysis(analysis)
+    else:
+        logger.info("Skipping save (analyze-only mode)")
+
     # Print results
     builder.print_analysis(analysis)
-    
+
     logger.info("Dependency graph building complete!")
-    
+
     return 0
 
 

@@ -11,10 +11,11 @@ This script:
 """
 
 import sys
+import argparse
 import json
 import numpy as np
 from pathlib import Path
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 from datetime import datetime
 
 # Add src to path
@@ -25,6 +26,12 @@ from indexing.embedder import EmbeddingGenerator
 from indexing.vector_store import VectorStore
 from utils.config import Config
 from utils.logger import setup_logger
+from utils.cli import (
+    create_base_parser,
+    load_config_from_args,
+    handle_list_profiles,
+    error_exit
+)
 
 
 class SemanticIndexer:
@@ -52,6 +59,73 @@ class SemanticIndexer:
         self.embedder = None
         self.vector_store = None
         self.functions = []
+
+    def has_existing_index(self) -> bool:
+        """Check if an existing index exists."""
+        index_path = self.embeddings_dir / 'function_index.faiss'
+        metadata_path = self.embeddings_dir / 'function_metadata.json'
+        return index_path.exists() and metadata_path.exists()
+
+    def load_existing_index(self) -> bool:
+        """
+        Load an existing vector index.
+
+        Returns:
+            True if successful, False otherwise
+        """
+        if not self.has_existing_index():
+            return False
+
+        self.logger.info("Loading existing vector index...")
+
+        # Get dimension from stats if available
+        stats_path = self.embeddings_dir / 'index_stats.json'
+        if stats_path.exists():
+            with open(stats_path, 'r') as f:
+                stats = json.load(f)
+            dimension = stats.get('embedding_dimension', 384)
+        else:
+            dimension = 384  # Default for all-MiniLM-L6-v2
+
+        self.vector_store = VectorStore(
+            dimension=dimension,
+            metric=self.metric,
+            index_type='flat'
+        )
+        self.vector_store.load(self.embeddings_dir)
+
+        self.logger.info(
+            f"Loaded index with {len(self.vector_store.function_name_to_id)} functions"
+        )
+        return True
+
+    def query_similar_functions(
+        self,
+        query: str,
+        top_k: int = 5
+    ) -> List[tuple]:
+        """
+        Query for similar functions by name.
+
+        Args:
+            query: Function name to search for
+            top_k: Number of results to return
+
+        Returns:
+            List of (function_name, similarity_score) tuples
+        """
+        if self.vector_store is None:
+            raise RuntimeError("Index not loaded. Run indexing first.")
+
+        if query not in self.vector_store.function_name_to_id:
+            self.logger.warning(f"Function '{query}' not found in index")
+            return []
+
+        return self.vector_store.find_similar_functions(
+            query,
+            top_k=top_k,
+            exclude_self=True
+        )
     
     def load_parsed_data(self) -> List[Dict[str, Any]]:
         """
@@ -66,7 +140,7 @@ class SemanticIndexer:
         if not summary_path.exists():
             raise FileNotFoundError(
                 f"Parse summary not found at {summary_path}. "
-                "Run scripts/01_parse_htop.py first!"
+                "Run scripts/01_parse_c_code.py first!"
             )
         
         with open(summary_path, 'r') as f:
@@ -223,14 +297,14 @@ class SemanticIndexer:
             'avg_search_time_ms': 0
         }
         
-        # Sample function names to test
-        test_functions = [
-            'Process_new',
-            'Panel_add',
-            'Vector_get',
-            'xSnprintf',
-            'Settings_read'
-        ]
+        # Sample function names to test (pick from indexed functions)
+        all_function_names = list(self.vector_store.function_name_to_id.keys())
+        # Select up to 5 functions evenly distributed across the index
+        if len(all_function_names) >= 5:
+            step = len(all_function_names) // 5
+            test_functions = [all_function_names[i * step] for i in range(5)]
+        else:
+            test_functions = all_function_names[:5]
         
         import time
         search_times = []
@@ -304,52 +378,109 @@ class SemanticIndexer:
         print("\n" + "="*60)
 
 
+def parse_args() -> argparse.Namespace:
+    """Parse command-line arguments."""
+    parser = create_base_parser(
+        description="Phase 3: Semantic Indexing - Generate embeddings and build vector index."
+    )
+
+    # Add script-specific arguments
+    parser.add_argument(
+        '--rebuild',
+        action='store_true',
+        help='Force rebuild embeddings and index (ignore existing)'
+    )
+    parser.add_argument(
+        '--query', '-q',
+        metavar='FUNC',
+        help='Query mode: find similar functions to FUNC'
+    )
+    parser.add_argument(
+        '--top-k', '-k',
+        type=int,
+        default=5,
+        metavar='N',
+        help='Number of similar functions to return (default: 5)'
+    )
+
+    return parser.parse_args()
+
+
 def main():
     """Main entry point for semantic indexing."""
-    # Load configuration
-    config_path = project_root / "config.yaml"
-    config = Config(str(config_path))
-    
-    # Setup logging
-    log_level = config.get('logging.level', 'INFO')
-    log_file = config.get('logging.file', 'logs/translator.log')
-    logger = setup_logger("semantic_indexer", level=log_level, log_file=log_file)
-    
-    logger.info("="*60)
+    args = parse_args()
+
+    # Handle --list-profiles
+    if handle_list_profiles(args, project_root):
+        return 0
+
+    # Load configuration with CLI args
+    config, logger = load_config_from_args(args, project_root, "semantic_indexer")
+
+    logger.info("=" * 60)
     logger.info("Starting semantic indexing")
-    logger.info("="*60)
-    
+    logger.info("=" * 60)
+
     try:
         # Create indexer
         indexer = SemanticIndexer(config, logger)
-        
+
+        # Query mode - just load index and query
+        if args.query:
+            if not indexer.load_existing_index():
+                error_exit("No existing index found. Run indexing first!")
+
+            logger.info(f"Querying for functions similar to: {args.query}")
+            similar = indexer.query_similar_functions(args.query, top_k=args.top_k)
+
+            if not similar:
+                print(f"\nNo similar functions found for: {args.query}")
+                print("(Function may not exist in the index)")
+            else:
+                print(f"\nFunctions similar to '{args.query}':")
+                print("-" * 50)
+                for name, score in similar:
+                    print(f"  {name:40s} {score:.3f}")
+                print("-" * 50)
+
+            return 0
+
+        # Check if we need to rebuild
+        if indexer.has_existing_index() and not args.rebuild:
+            logger.info("Existing index found. Use --rebuild to regenerate.")
+            # Just validate existing index
+            if indexer.load_existing_index():
+                validation_results = indexer.validate_index()
+                indexer.print_validation_results(validation_results)
+                indexer.print_statistics()
+                return 0
+
         # Load parsed data
         functions = indexer.load_parsed_data()
-        
+
         if not functions:
-            logger.error("No functions found to index!")
-            return 1
-        
+            error_exit("No functions found to index!")
+
         # Generate embeddings
         embeddings = indexer.generate_embeddings(functions)
-        
+
         # Build vector index
         indexer.build_vector_index(embeddings, functions)
-        
+
         # Save everything
         indexer.save_artifacts(embeddings, functions)
-        
+
         # Validate
         validation_results = indexer.validate_index()
-        
+
         # Print results
         indexer.print_validation_results(validation_results)
         indexer.print_statistics()
-        
+
         logger.info("Semantic indexing complete!")
-        
+
         return 0
-        
+
     except Exception as e:
         logger.error(f"Error during semantic indexing: {e}", exc_info=True)
         return 1

@@ -1,15 +1,16 @@
 #! /usr/bin/env python3
 """
-Phase 1: Parse htop C codebase into AST representation.
+Phase 1: Parse C codebase into AST representation.
 
 This script:
-1. Finds all C files in the htop source directory
+1. Finds all C files in the C source directory
 2. Parses each file using tree-sitter
 3. Caches parsed AST data as JSON
 4. Generates summary statistics
 """
 
 import sys
+import argparse
 import json
 from pathlib import Path
 from typing import List, Dict, Any
@@ -22,38 +23,71 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root / "src"))
 
 from parser.ast_parser import CParser
+from parser.parser_factory import ParserFactory
 from utils.config import Config
 from utils.logger import setup_logger
+from utils.cli import (
+    create_base_parser,
+    load_config_from_args,
+    handle_list_profiles,
+    error_exit
+)
 
 
 class BatchParser:
-    """Parse multiple C files and cache results."""
-    
-    def __init__(self, config: Config, logger):
-        """Initialize batch parser with configuration."""
+    """Parse multiple C/C++ files and cache results."""
+
+    def __init__(self, config: Config, logger, force_reparse: bool = False):
+        """
+        Initialize batch parser with configuration.
+
+        Args:
+            config: Configuration object
+            logger: Logger instance
+            force_reparse: If True, bypass cache and reparse all files
+        """
         self.config = config
         self.logger = logger
-        
+        self.force_reparse = force_reparse
+
         # Get paths from config
-        self.htop_path = Path(config.get('source.htop_path'))
+        self.source_path = Path(config.get('source.source_path'))
         self.cache_dir = Path(config.get('output.ast_cache'))
         self.cache_dir.mkdir(parents=True, exist_ok=True)
-        
+
+        # Get language setting
+        self.language = config.get('source.language', 'c')
+
         # Get parsing settings
-        self.extensions = config.get('parsing.extensions', ['.c', '.h'])
+        # Support both old flat format and new nested format
+        extensions_config = config.get('parsing.extensions', ['.c', '.h'])
+        if isinstance(extensions_config, dict):
+            # New format: {c: ['.c', '.h'], cpp: ['.cpp', ...]}
+            if self.language == 'c':
+                self.extensions = extensions_config.get('c', ['.c', '.h'])
+            elif self.language == 'cpp':
+                self.extensions = extensions_config.get('cpp', ['.cpp', '.cc', '.cxx', '.hpp', '.h'])
+            else:  # auto or mixed - use all
+                self.extensions = extensions_config.get('c', []) + extensions_config.get('cpp', [])
+        else:
+            # Old format: ['.c', '.h']
+            self.extensions = extensions_config
         self.max_file_size_mb = config.get('parsing.max_file_size_mb', 10)
         self.parallel = config.get('performance.parallel_parsing', True)
         self.num_workers = config.get('performance.num_workers', None)
-        self.use_cache = config.get('performance.cache_asts', True)
+        self.use_cache = config.get('performance.cache_asts', True) and not force_reparse
+
+        # Create parser factory for C/C++ support
+        self.parser_factory = ParserFactory(config)
     
     def find_c_files(self) -> List[Path]:
         """
-        Find all C source files in the htop directory.
+        Find all C source files in the source directory.
         
         Returns:
             List of Path objects for C files
         """
-        self.logger.info(f"Searching for C files in {self.htop_path}")
+        self.logger.info(f"Searching for C files in {self.source_path}")
         
         c_files = []
         
@@ -63,10 +97,10 @@ class BatchParser:
         
         if include_dirs:
             # Only search specified directories
-            search_paths = [self.htop_path / d for d in include_dirs]
+            search_paths = [self.source_path / d for d in include_dirs]
         else:
-            # Search entire htop directory
-            search_paths = [self.htop_path]
+            # Search entire source directory
+            search_paths = [self.source_path]
         
         for search_path in search_paths:
             if not search_path.exists():
@@ -100,8 +134,8 @@ class BatchParser:
         Returns:
             Path to cached JSON file
         """
-        # Create relative path from htop root
-        rel_path = source_file.relative_to(self.htop_path)
+        # Create relative path from source root
+        rel_path = source_file.relative_to(self.source_path)
         # Replace extension with .json
         cache_file = self.cache_dir / rel_path.with_suffix('.json')
         return cache_file
@@ -153,8 +187,8 @@ class BatchParser:
                     'data': cached_data
                 }
             
-            # Parse the file
-            parser = CParser()  # Create new parser instance for parallel processing
+            # Parse the file using appropriate parser (C or C++)
+            parser = self.parser_factory.get_parser_for_file(file_path)
             result = parser.parse_file(file_path)
             
             # Save to cache
@@ -317,7 +351,7 @@ class BatchParser:
     def print_statistics(self, stats: Dict[str, Any]) -> None:
         """Print statistics in a readable format."""
         print("\n" + "="*60)
-        print("HTOP PARSING SUMMARY")
+        print("C CODE PARSING SUMMARY")
         print("="*60)
         print(f"\nFiles:")
         print(f"  Total files:    {stats['total_files']}")
@@ -338,42 +372,66 @@ class BatchParser:
         print("\n" + "="*60)
 
 
+def parse_args() -> argparse.Namespace:
+    """Parse command-line arguments."""
+    parser = create_base_parser(
+        description="Phase 1: Parse C/C++ codebase into AST representation."
+    )
+
+    # Add script-specific arguments
+    parser.add_argument(
+        '--force', '-f',
+        action='store_true',
+        help='Force re-parse all files (bypass cache)'
+    )
+
+    return parser.parse_args()
+
+
 def main():
     """Main entry point for batch parsing."""
-    # Load configuration
-    config_path = project_root / "config.yaml"
-    config = Config(str(config_path))
-    
-    # Setup logging
-    log_level = config.get('logging.level', 'INFO')
-    log_file = config.get('logging.file', 'logs/translator.log')
-    logger = setup_logger("batch_parser", level=log_level, log_file=log_file)
-    
-    logger.info("="*60)
-    logger.info("Starting htop batch parsing")
-    logger.info("="*60)
-    
+    args = parse_args()
+
+    # Handle --list-profiles
+    if handle_list_profiles(args, project_root):
+        return 0
+
+    # Load configuration with CLI args
+    config, logger = load_config_from_args(args, project_root, "batch_parser")
+
+    # Log startup
+    logger.info("=" * 60)
+    logger.info("Starting C/C++ code batch parsing")
+    logger.info("=" * 60)
+
+    # Show configuration source
+    lang_source = config.get_value_source('source.language')
+    logger.info(f"Language: {config.get('source.language')} (from {lang_source})")
+    logger.info(f"Source path: {config.get('source.source_path')}")
+
+    if args.force:
+        logger.info("Force re-parse enabled (bypassing cache)")
+
     # Create batch parser
-    batch_parser = BatchParser(config, logger)
-    
-    # Find C files
+    batch_parser = BatchParser(config, logger, force_reparse=args.force)
+
+    # Find C/C++ files
     c_files = batch_parser.find_c_files()
-    
+
     if not c_files:
-        logger.error("No C files found!")
-        return 1
-    
+        error_exit("No source files found!")
+
     # Parse all files
     results = batch_parser.parse_all(c_files)
-    
+
     # Save summary
     batch_parser.save_summary(results)
-    
+
     # Print statistics
     batch_parser.print_statistics(results['statistics'])
-    
+
     logger.info("Batch parsing complete!")
-    
+
     return 0
 
 

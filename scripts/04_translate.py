@@ -14,7 +14,7 @@ import sys
 import json
 import argparse
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Set
 from datetime import datetime
 from tqdm import tqdm
 
@@ -29,10 +29,18 @@ from validation.validator import CodeValidator
 from indexing.vector_store import VectorStore
 from utils.config import Config
 from utils.logger import setup_logger
+from utils.cli import (
+    create_base_parser,
+    load_config_from_args,
+    handle_list_profiles,
+    add_common_arguments,
+    add_list_profiles_argument,
+    error_exit
+)
 
 
 class TranslationOrchestrator:
-    """Orchestrate the translation of htop C codebase to Python."""
+    """Orchestrate the translation of C codebase to Python."""
     
     def __init__(self, config: Config, logger, debug_mode: bool = False):
         """Initialize translation orchestrator with configuration."""
@@ -62,6 +70,11 @@ class TranslationOrchestrator:
         self.functions = {}
         self.translation_order = []
         self.translated_functions = set()
+
+    def set_output_dir(self, output_dir: Path) -> None:
+        """Override the output directory."""
+        self.output_dir = output_dir
+        self.output_dir.mkdir(parents=True, exist_ok=True)
     
     def initialize(self) -> bool:
         """
@@ -78,11 +91,23 @@ class TranslationOrchestrator:
             self.vector_store = VectorStore.load(self.embeddings_dir)
             
             # 2. Initialize LLM client
-            self.logger.info("Connecting to Ollama...")
             llm_config = self.config.get('llm')
+            backend = llm_config.get('backend', 'ollama')
+            self.logger.info(f"Connecting to LLM backend: {backend}...")
+
+            # Get backend-specific settings
+            if backend == 'ollama':
+                backend_config = llm_config.get('ollama', {})
+                base_url = backend_config.get('base_url', 'http://localhost:11434')
+                model = backend_config.get('model', 'qwen3:4b')
+            else:
+                # For future backends, use top-level defaults
+                base_url = 'http://localhost:11434'
+                model = llm_config.get(backend, {}).get('model', 'qwen3:4b')
+
             self.llm_client = OllamaClient(
-                base_url=llm_config.get('base_url', 'http://localhost:11434'),
-                model=llm_config.get('model', 'qwen3:4b'),
+                base_url=base_url,
+                model=model,
                 temperature=llm_config.get('temperature', 0.2)
             )
             
@@ -174,38 +199,60 @@ class TranslationOrchestrator:
     def translate_functions(
         self,
         limit: Optional[int] = None,
-        start_with_leaves: bool = True
+        start_with_leaves: bool = True,
+        specific_functions: Optional[List[str]] = None,
+        continue_session: bool = False
     ) -> List[TranslationResult]:
         """
         Translate functions in dependency order.
-        
+
         Args:
             limit: Maximum number of functions to translate
             start_with_leaves: Start with leaf nodes (no dependencies)
-            
+            specific_functions: List of specific function names to translate
+            continue_session: Continue from last session (skip already translated)
+
         Returns:
             List of TranslationResults
         """
-        # Determine which functions to translate
-        if start_with_leaves:
-            # Filter to leaf functions
-            graph_path = self.graph_dir / 'graph_analysis.json'
-            with open(graph_path, 'r') as f:
-                analysis = json.load(f)
-            
-            # Functions with no outgoing edges (leaves)
-            # For simplicity, use first N functions from translation order
-            funcs_to_translate = self.translation_order[:limit] if limit else self.translation_order
+        # If specific functions requested, use those
+        if specific_functions:
+            funcs_to_translate = []
+            for func_name in specific_functions:
+                if func_name in self.functions:
+                    funcs_to_translate.append(func_name)
+                else:
+                    self.logger.warning(f"Function not found: {func_name}")
         else:
-            funcs_to_translate = self.translation_order[:limit] if limit else self.translation_order
-        
-        # Filter out already translated
-        funcs_to_translate = [
-            f for f in funcs_to_translate
-            if f in self.functions and f not in self.translated_functions
-        ]
-        
-        if limit:
+            # Determine which functions to translate
+            if start_with_leaves:
+                # Filter to leaf functions
+                graph_path = self.graph_dir / 'graph_analysis.json'
+                with open(graph_path, 'r') as f:
+                    analysis = json.load(f)
+
+                # Functions with no outgoing edges (leaves)
+                # For simplicity, use first N functions from translation order
+                funcs_to_translate = self.translation_order[:limit] if limit else self.translation_order
+            else:
+                funcs_to_translate = self.translation_order[:limit] if limit else self.translation_order
+
+        # Filter out already translated (if continue mode or already done)
+        if continue_session:
+            # Load previously translated functions from translation memory
+            memory_funcs = set(self.translator.translation_memory.keys()) if self.translator.translation_memory else set()
+            funcs_to_translate = [
+                f for f in funcs_to_translate
+                if f in self.functions and f not in memory_funcs
+            ]
+            self.logger.info(f"Continuing session: {len(memory_funcs)} already translated")
+        else:
+            funcs_to_translate = [
+                f for f in funcs_to_translate
+                if f in self.functions and f not in self.translated_functions
+            ]
+
+        if limit and not specific_functions:
             funcs_to_translate = funcs_to_translate[:limit]
         
         self.logger.info(f"Translating {len(funcs_to_translate)} functions...")
@@ -330,64 +377,129 @@ class TranslationOrchestrator:
         print("="*60 + "\n")
 
 
+def parse_args() -> argparse.Namespace:
+    """Parse command-line arguments."""
+    parser = argparse.ArgumentParser(
+        description="Phase 4: Translate C/C++ code to Python using LLM with RAG.",
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+
+    # Add common CLI arguments (--profile, --lang, --config, --verbose)
+    add_common_arguments(parser)
+    add_list_profiles_argument(parser)
+
+    # Translation-specific arguments
+    parser.add_argument(
+        '--limit',
+        type=int,
+        metavar='N',
+        help='Limit number of functions to translate'
+    )
+    parser.add_argument(
+        '--no-leaves',
+        action='store_true',
+        help="Don't prioritize leaf nodes"
+    )
+    parser.add_argument(
+        '--dry-run',
+        action='store_true',
+        help='Show what would be translated without translating'
+    )
+    parser.add_argument(
+        '--debug',
+        action='store_true',
+        help='Save failed translations to debug/ folder'
+    )
+    parser.add_argument(
+        '--function', '-f',
+        action='append',
+        metavar='NAME',
+        help='Translate specific function(s) by name (can be used multiple times)'
+    )
+    parser.add_argument(
+        '--output-dir', '-o',
+        metavar='PATH',
+        help='Override output directory for translated Python files'
+    )
+    parser.add_argument(
+        '--continue',
+        dest='continue_session',
+        action='store_true',
+        help='Continue from last translation session (skip already translated)'
+    )
+
+    return parser.parse_args()
+
+
 def main():
     """Main entry point for translation."""
-    parser = argparse.ArgumentParser(description="Translate htop C code to Python")
-    parser.add_argument('--limit', type=int, help='Limit number of functions to translate')
-    parser.add_argument('--no-leaves', action='store_true', help='Don\'t prioritize leaf nodes')
-    parser.add_argument('--dry-run', action='store_true', help='Show what would be translated')
-    parser.add_argument('--verbose', '-v', action='store_true', help='Verbose logging (DEBUG level)')
-    parser.add_argument('--debug', action='store_true', help='Save failed translations to debug/ folder')
-    
-    args = parser.parse_args()
-    
-    # Load configuration
-    config_path = project_root / "config.yaml"
-    config = Config(str(config_path))
-    
-    # Setup logging (override with verbose flag)
-    log_level = 'DEBUG' if args.verbose else config.get('logging.level', 'INFO')
-    log_file = config.get('logging.file', 'logs/translator.log')
-    logger = setup_logger("translator", level=log_level, log_file=log_file)
-    
-    logger.info("="*60)
-    logger.info("Starting C-to-Python translation")
-    logger.info("="*60)
-    
+    args = parse_args()
+
+    # Handle --list-profiles
+    if handle_list_profiles(args, project_root):
+        return 0
+
+    # Load configuration with CLI args
+    config, logger = load_config_from_args(args, project_root, "translator")
+
+    logger.info("=" * 60)
+    logger.info("Starting C/C++-to-Python translation")
+    logger.info("=" * 60)
+
+    # Show configuration
+    logger.info(f"Source: {config.get('source.source_path')}")
+    if args.function:
+        logger.info(f"Translating specific functions: {', '.join(args.function)}")
+    if args.continue_session:
+        logger.info("Continuing from last session")
+
     try:
         # Create orchestrator
         orchestrator = TranslationOrchestrator(config, logger, debug_mode=args.debug)
-        
+
+        # Override output directory if specified
+        if args.output_dir:
+            orchestrator.set_output_dir(Path(args.output_dir))
+            logger.info(f"Output directory: {args.output_dir}")
+
         # Initialize
         if not orchestrator.initialize():
-            logger.error("Initialization failed!")
-            return 1
-        
+            error_exit("Initialization failed!")
+
         # Load data
         if not orchestrator.load_data():
-            logger.error("Failed to load data!")
-            return 1
-        
+            error_exit("Failed to load data!")
+
         if args.dry_run:
-            print(f"Would translate {args.limit or 'all'} functions")
+            if args.function:
+                funcs = [f for f in args.function if f in orchestrator.functions]
+                print(f"Would translate {len(funcs)} specific functions: {', '.join(funcs)}")
+            else:
+                print(f"Would translate {args.limit or 'all'} functions")
             return 0
-        
+
         # Translate
         results = orchestrator.translate_functions(
             limit=args.limit,
-            start_with_leaves=not args.no_leaves
+            start_with_leaves=not args.no_leaves,
+            specific_functions=args.function,
+            continue_session=args.continue_session
         )
-        
+
+        if not results:
+            logger.info("No functions to translate")
+            return 0
+
         # Save results
         orchestrator.save_results(results)
-        
+
         # Print summary
         orchestrator.print_summary(results)
-        
+
         logger.info("Translation complete!")
-        
+
         return 0
-        
+
     except Exception as e:
         logger.error(f"Translation failed: {e}", exc_info=True)
         return 1
