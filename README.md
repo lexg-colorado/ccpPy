@@ -1,4 +1,4 @@
-# C2Py - RAG-Based C/C++ to Python Translator
+# ccpPy - RAG-Based C/C++ to Python Translator
 
 A local-first code translation system that converts C/C++ codebases to Python using dependency-aware RAG (Retrieval-Augmented Generation) and local LLMs via Ollama.
 
